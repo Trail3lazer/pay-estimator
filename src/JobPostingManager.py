@@ -1,19 +1,32 @@
-import os
-import json
-import re
-import settings
-import pandas as pd
-import numpy as np
-from scipy import stats
+from imports import os, json, chain, re, pd, np, stats, settings
 
 class JobPostingManager:
+        
     def __init__(self) -> None:
         self._backup_postings: pd.DataFrame = None
         self._postings: pd.DataFrame = None
         self._postings_with_pay: pd.DataFrame = None
         self._state_abbr: dict[str,str] = None
         self._pay_cols = ['max_salary','med_salary','min_salary']
+        
+        # fulltime & part time statistics are from this survey from the U.S. BUREAU OF LABOR STATISTICS https://www.bls.gov/charts/american-time-use/emp-by-ftpt-job-edu-h.htm
+        self._fulltime = self._calculate_work_week_hours(8.42, 0.874, 5.57, 0.287)
+        self._parttime = self._calculate_work_week_hours(5.54, 0.573, 5.48, 0.319)
 
+        #https://www.bls.gov/ebs/factsheets/paid-vacations.htm#:~:text=The%20number%20of%20vacation%20days,19%20days%20of%20paid%20vacation.
+        vacation_day_pcts = np.matrix([  
+        #<5, <10, <15, <20, <25, >24
+        [8,	31,	34,	18,	7,	2],
+        [3,	12,	30,	32,	16,	7],
+        [2,	8,	18,	33,	23,	17],
+        [2,	8,	14,	20,	29,	28]
+        ])
+        holidays = 11 # https://www.ca2.uscourts.gov/clerk/calendars/federal_holidays.html
+        weeks_off = (holidays + self._calculate_vacation_days(vacation_day_pcts))/7
+        self._weeks = 52
+        self._work_weeks = self._weeks - weeks_off
+        self._months = 12
+        
     @property
     def postings(self):
         if self._postings is None:
@@ -82,18 +95,13 @@ class JobPostingManager:
 
 
     def _clean_pay(self, row):
-        # Keep YEARLY
-        # Monthly * 12
-        # WEEKLY * 52
-        # HOURLY * (Part-time ? 20 : 40) * 52
-        # BIWEEKLY drop lt 10000
         pay_period = row['pay_period']
         if pay_period == 'MONTHLY': 
-            self._update_pay(row, 12)
+            self._update_pay(row, self._months)
         elif pay_period == 'WEEKLY': 
-            self._update_pay(row, 52)
+            self._update_pay(row, self._weeks)
         elif pay_period == 'HOURLY':
-            hours = (20 if row['work_type'] == 'PART_TIME' else 40) * 52
+            hours = (self._parttime if row['work_type'] == 'PART_TIME' else self._fulltime) * self._work_weeks
             for c in self._pay_cols:
                 if row[c] != row[c]:
                     continue
@@ -104,7 +112,7 @@ class JobPostingManager:
                 if row[c] != row[c]:
                     continue
                 if row[c] < 10000:
-                    row[c] = row[c] * 26
+                    row[c] = row[c] * self._weeks / 2
         return row
 
 
@@ -150,5 +158,23 @@ class JobPostingManager:
         
     def get_abnormal_states(self, ser):
         return ser[ser.str.len() != 2].unique()
+    
+    
+    def _calculate_work_week_hours(self, weekday_hrs, week_day_pct, weekend_hrs, weekend_pct):
+        total_weekday = weekday_hrs * week_day_pct * 5
+        total_weekend = weekend_hrs * weekend_pct * 2
+        return total_weekday + total_weekend
+    
+    
+    def _calculate_vacation_days(self, pcts: np.matrix):
+        days = []
+        it = np.nditer(pcts, flags=['c_index','multi_index'])
+        for pct in it:
+            i, j = it.multi_index
+            days.append(np.sum([day*pct/100 for day in range((j*5),(j*5)+5)]))
+        avg = np.mean(days)
+        print('Average vacation days: '+str(avg))
+        return avg
+    
     
  

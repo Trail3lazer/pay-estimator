@@ -1,14 +1,8 @@
-import os
-import settings
-import pandas as pd
-import numpy as np
-from gensim.models import Word2Vec
-from gensim.utils import simple_preprocess
-from sklearn.model_selection import train_test_split
+from imports import os, pd, settings, np, train_test_split, Word2Vec, simple_preprocess
 
 class Job2Vec:
     def __init__(self, jobs_df: pd.DataFrame) -> None:
-        self._dataset: pd.DataFrame = None
+        self._dataset: np.array = None
         self._model = None
         self._jobs_df = jobs_df
             
@@ -23,7 +17,7 @@ class Job2Vec:
     def model(self):
         if self._model is None:
             self._model = self._get_or_train()
-        return self._dataset
+        return self._model
     
     
     def retrain(self):
@@ -36,11 +30,12 @@ class Job2Vec:
 
         if(os.path.isfile(tokenized_csv_path) and not overwrite):
             print("Retrieving an existing dataset at "+tokenized_csv_path)
-            ser = pd.read_csv(tokenized_csv_path, index_col=0) 
+            ser = pd.read_csv(tokenized_csv_path, index_col=0).iloc[:, 0]
+            print(ser[:10])
         else:
             df = self._jobs_df.copy()
             
-            print("Combining the job title and description columns to create a single array. Word2Vec does not need them separated.")
+            print("Combining the job title, description and skills, columns to create a single array. Word2Vec does not need them separated.")
             ser = pd.concat([df['title'], df['description'], df['skills_desc']], ignore_index=True)
             
             print("Cleaning and tokenizing each row with a helper method from Gensim. This usually takes a little more than a minute.")
@@ -55,18 +50,23 @@ class Job2Vec:
         return ser
 
 
-    def _get_or_train(self, overwrite=True):
-        vectors_path = settings.REPO_PATH +'/assets/word_vectors.model'
-        model = None
-
-        if(os.path.isfile(vectors_path) and not overwrite):
-            model = Word2Vec.load(vectors_path)
+    def _get_or_train(self, overwrite=False):
+        vectors_path = settings.REPO_PATH +'/assets/w2v.model'        
+        m = None
+        exists = os.path.isfile(vectors_path)
+        print(exists, vectors_path)
+        if(exists and not overwrite):
+            print("Retrieving an existing model from "+vectors_path)
+            m = Word2Vec.load(vectors_path)
         else:
             print("Splitting the tokenized data into an 80% training set and 20% test set.")
-            x_train, x_test = train_test_split(self.dataset, test_size=0.2)
-            model = Word2Vec(x_train, vector_size=100, window=3, min_count=10, workers=8)
-            model.wv.save(vectors_path)
-        return model
+            training_set, testing_set = train_test_split(self.dataset, test_size=0.2)
+            print("Training...")
+            m = Word2Vec(training_set, vector_size=300, window=5, min_count=3, workers=os.cpu_count()-1)
+            print("Saving the model.")
+            m.save(vectors_path)
+            
+        return m
     
     def test_model(self, model, x_train, x_test):
         words = set(model.wv.index_to_key )
