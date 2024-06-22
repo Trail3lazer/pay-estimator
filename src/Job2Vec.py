@@ -32,15 +32,16 @@ class Job2Vec:
     
         
     def _create_training_set(self, overwrite=False):
-        df = self._jobs_df.copy()
         tokenized_csv_path = settings.REPO_PATH +'/archive/tokenized_jobs.csv'
 
         if(os.path.isfile(tokenized_csv_path) and not overwrite):
             print("Retrieving an existing dataset at "+tokenized_csv_path)
             ser = pd.read_csv(tokenized_csv_path, index_col=0) 
         else:
+            df = self._jobs_df.copy()
+            
             print("Combining the job title and description columns to create a single array. Word2Vec does not need them separated.")
-            ser = pd.concat([df['title'], df['description']], ignore_index=True)
+            ser = pd.concat([df['title'], df['description'], df['skills_desc']], ignore_index=True)
             
             print("Cleaning and tokenizing each row with a helper method from Gensim. This usually takes a little more than a minute.")
             ser = ser.apply(self._prepare_sentence)

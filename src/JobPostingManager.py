@@ -10,8 +10,9 @@ class JobPostingManager:
     def __init__(self) -> None:
         self._backup_postings: pd.DataFrame = None
         self._postings: pd.DataFrame = None
-        self._salary_postings: pd.DataFrame = None
+        self._postings_with_pay: pd.DataFrame = None
         self._state_abbr: dict[str,str] = None
+        self._pay_cols = ['max_salary','med_salary','min_salary']
 
     @property
     def postings(self):
@@ -22,17 +23,92 @@ class JobPostingManager:
         return self._postings
 
     @property
-    def salary_postings(self):
-        if self._salary_postings is None:
-            self._salary_postings = self._create_salary_postings()
-        return self._salary_postings
+    def postings_with_pay(self):
+        if self._postings_with_pay is None:
+            self._postings_with_pay = self._drop_jobs_missing_pay()
+        return self._postings_with_pay
 
     def reset_postings(self):
         self._backup_postings = None
         self._postings = None
         self._salary_postings = None
     
-    def _clean_state(self,row):    
+    
+    def _create_postings(self, overwrite=False):
+        cached = settings.REPO_PATH + '/archive/clean_postings.csv'
+
+        if(os.path.isfile(cached) and not overwrite):
+            print("Retrieving an existing dataset at "+cached)
+            df = pd.read_csv(cached, index_col=0) 
+        else:
+            print("Reading CSV")
+            df = pd.read_csv(settings.REPO_PATH + '/archive/postings.csv')
+            
+            columns_to_drop = [
+                'views','applies','original_listed_time','remote_allowed','job_posting_url','application_url','application_type',
+                'expiry','closed_time','listed_time','posting_domain','sponsored','compensation_type','sponsored',
+                ]
+            
+            print("Dropping unhelpful columns: "+str(columns_to_drop))
+            df.drop(columns_to_drop, axis=1, inplace=True)
+            
+            print("Reading the state abbreviation json map.")
+            if(self._state_abbr is None): 
+                self._state_abbr = dict(json.load(open(settings.REPO_PATH + '/assets/state_abbr.json')))
+                
+            print("Creating a state abbreviation column from the location column and normalizing the pay columns.")
+            df['state'] = ''
+            df = df.apply(self._normalize_row, axis=1)
+            
+            print("Setting outlier pay column values to NaN.")
+            for name in self._pay_cols:
+                zscore_thresh = 5 if name == 'med_salary' else 3
+                mask = (np.abs(stats.zscore(df[name].astype(float), nan_policy='omit')) > zscore_thresh) | (df[name].astype(float) < 10000)
+                df[name] = df[name].mask(mask, np.NaN)
+                
+            print("Creating an average salary column that is is the average of the salary pay columns. "+str(self._pay_cols))
+            df['avg_salary'] = df[self._pay_cols].mean(axis=1)
+            
+            print('Saving cleaned the posting table so we do not need to process it each time.')
+            df.to_csv(cached)
+        return df
+    
+
+    def _update_pay(self, row, mult):
+        for c in self._pay_cols:
+            if row[c] != row[c]:
+                continue
+            row[c] = row[c] * mult
+
+
+    def _clean_pay(self, row):
+        # Keep YEARLY
+        # Monthly * 12
+        # WEEKLY * 52
+        # HOURLY * (Part-time ? 20 : 40) * 52
+        # BIWEEKLY drop lt 10000
+        pay_period = row['pay_period']
+        if pay_period == 'MONTHLY': 
+            self._update_pay(row, 12)
+        elif pay_period == 'WEEKLY': 
+            self._update_pay(row, 52)
+        elif pay_period == 'HOURLY':
+            hours = (20 if row['work_type'] == 'PART_TIME' else 40) * 52
+            for c in self._pay_cols:
+                if row[c] != row[c]:
+                    continue
+                if row[c] < 1000:
+                    row[c] = row[c] * hours
+        elif pay_period == 'BIWEEKLY':
+            for c in self._pay_cols:
+                if row[c] != row[c]:
+                    continue
+                if row[c] < 10000:
+                    row[c] = row[c] * 26
+        return row
+
+
+    def _clean_state(self, row):    
         if row['location'] != row['location']: 
             return row
 
@@ -61,55 +137,17 @@ class JobPostingManager:
         return row
 
 
-    def _create_postings(self):
-        print("Reading CSV")
-        
-        df = pd.read_csv(settings.REPO_PATH + '/archive/postings.csv')
+    def _normalize_row(self, row):
+        row = self._clean_state(row)
+        row = self._clean_pay(row)
+        return row
 
-        columns_to_drop = [
-            'views','applies','original_listed_time','remote_allowed','job_posting_url','application_url','application_type',
-            'expiry','closed_time','listed_time','posting_domain','sponsored','compensation_type','sponsored',
-            ]
-        
-        print("Dropping unhelpful columns: "+str(columns_to_drop))
-        
-        df.drop(columns_to_drop, axis=1, inplace=True)
-        
-        print("Reading the state abbreviation json map.")
-        
-        if(self._state_abbr is None): 
-            self._state_abbr = dict(json.load(open(settings.REPO_PATH + '/assets/state_abbr.json')))
 
-        print("Creating a state abbreviation column from the location column.")
+    def _drop_jobs_missing_pay(self):
+        print("Dropping rows where every pay column is empty.")
+        return self.postings.copy().dropna(thresh=1, subset=self._pay_cols)
         
-        df['state'] = ''
-        df = df.apply(self._clean_state, axis=1)
-
-        print(df.head())
-        return df
-    
-    
-    def _create_salary_postings(self):
-        df = self.postings.copy()
-        pay_cols = ['max_salary','med_salary','min_salary']
         
-        print("Dropping rows where every salary column is empty or the listing is an hourly job.")
-        
-        df = df.loc[df['pay_period'] != 'HOURLY'].copy().dropna(thresh=1, subset=pay_cols)
-        
-        print("Setting outlier salary column values to NaN where the zscore is greater than 2.")
-        
-        for name in pay_cols:
-            mask = np.abs(stats.zscore(df[name].astype(float), nan_policy='omit')) > 2
-            df[name] = df[name].mask(mask, np.NaN)
-        
-        print("Creating an average salary column that is is the average of the salary pay columns. "+str(pay_cols))
-        
-        df['avg_salary'] = df[pay_cols].mean(axis=1)
-        
-        return df
-    
-    
     def get_abnormal_states(self, ser):
         return ser[ser.str.len() != 2].unique()
     
