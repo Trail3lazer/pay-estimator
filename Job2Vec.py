@@ -1,4 +1,4 @@
-import os, settings
+import os, settings, json
 import pandas as pd
 import numpy as np
 from gensim.models import Word2Vec
@@ -31,26 +31,27 @@ class Job2Vec:
     
         
     def _create_training_set(self, overwrite=False):
-        tokenized_csv_path = settings.REPO_PATH +'/archive/tokenized_jobs.csv'
+        tokenized_json_path = settings.REPO_PATH +'/archive/tokenized_jobs.json'
 
-        if(os.path.isfile(tokenized_csv_path) and not overwrite):
-            print("Retrieving an existing dataset at "+tokenized_csv_path)
-            ser = pd.read_csv(tokenized_csv_path, index_col=0).iloc[:, 0]
-            print(ser[:10])
+        if(os.path.isfile(tokenized_json_path) and not overwrite):
+            print("Retrieving an existing dataset at "+tokenized_json_path)
+            ser = pd.read_json(tokenized_json_path)
         else:
             df = self._jobs_df.copy()
             
-            print("Combining the job title, description and skills, columns to create a single array. Word2Vec does not need them separated.")
-            ser = pd.concat([df['title'], df['description'], df['skills_desc']], ignore_index=True)
+            bls_jobs = self._get_bls_jobs()
             
-            print("Cleaning and tokenizing each row with a helper method from Gensim. This usually takes a little more than a minute.")
+            print("Combining the the bls.gov job list, LinkedIn job title, description and skills, columns to create a single array. Word2Vec does not need them separated.")
+            ser = pd.concat([bls_jobs, df['title'], df['description'], df['skills_desc']], ignore_index=True)
+            
+            print("Cleaning and tokenizing each row with a helper method from Gensim. This usually takes less than 2 minutes.")
             ser = ser.apply(self._prepare_sentence)
             
             print("Dropping empty rows.")
             ser.dropna(inplace=True)
             
-            print("Saving the training and test sets as a csv file.")
-            ser.to_csv(tokenized_csv_path)
+            print("Saving the cleaned data set.")
+            ser.to_json(tokenized_json_path, orient='values', indent=2)
 
         return ser
 
@@ -84,7 +85,15 @@ class Job2Vec:
     def _prepare_sentence(self, line):
         x = line
         if(isinstance(x, str)):
-            x = simple_preprocess(x, min_len=3)
+            x = simple_preprocess(x, deacc=True, min_len=4)
         else:
             x = pd.NA
         return x
+
+    #From https://www.bls.gov/ooh/a-z-index.htm
+    def _get_bls_jobs(self):
+        bls_jobs = json.load(open(settings.REPO_PATH +'/assets/bls_gov_jobs.json'))
+        for i,x in enumerate(bls_jobs):
+            joined = ' '.join(x)
+            bls_jobs[i] = pd.NA if len(joined) < 4 else joined
+        return pd.Series(bls_jobs).dropna()
