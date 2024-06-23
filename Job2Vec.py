@@ -1,4 +1,4 @@
-import os, settings, json
+import os, settings, json, pickle
 import pandas as pd
 import numpy as np
 from gensim.models import Word2Vec
@@ -10,18 +10,27 @@ class Job2Vec:
         self._dataset: np.array = None
         self._model = None
         self._jobs_df = jobs_df
+        self.tokenized_data_path = settings.REPO_PATH +'/archive/tokenized_jobs.bin'
+        self.model_path = settings.REPO_PATH +'/assets/w2v/w2v.model'  
             
     
-    @property
-    def dataset(self):
+    def get_dataset(self):
         if self._dataset is None:
-            self._dataset = self._create_training_set()
+            if(os.path.isfile(self.tokenized_data_path)):
+                print("Retrieving an existing dataset at "+self.tokenized_data_path)
+                self._dataset = pd.read_pickle(self.tokenized_data_path)
+            else:
+                self._dataset = self._create_training_set()
         return self._dataset
     
-    @property
-    def model(self):
-        if self._model is None:
-            self._model = self._get_or_train()
+    
+    def get_model(self):
+        if self._model is None:       
+            if(os.path.isfile(self.model_path)):
+                print("Retrieving an existing model from "+self.model_path)
+                self._model = Word2Vec.load(self.model_path)
+            else:
+                self._model = self._get_or_train()
         return self._model
     
     
@@ -29,49 +38,45 @@ class Job2Vec:
         self._dataset = self._create_training_set(overwrite=True)
         self._model = self._get_or_train(overwrite=True)
     
+    
+    def tokenize(self, sentence):
+        x = sentence
+        if(isinstance(x, str)):
+            x = simple_preprocess(x, deacc=True, min_len=4)
+        else:
+            x = []
+        return x
+    
         
     def _create_training_set(self, overwrite=False):
-        tokenized_json_path = settings.REPO_PATH +'/archive/tokenized_jobs.json'
 
-        if(os.path.isfile(tokenized_json_path) and not overwrite):
-            print("Retrieving an existing dataset at "+tokenized_json_path)
-            ser = pd.read_json(tokenized_json_path)
-        else:
-            df = self._jobs_df.copy()
-            
-            bls_jobs = self._get_bls_jobs()
-            
-            print("Combining the the bls.gov job list, LinkedIn job title, description and skills, columns to create a single array. Word2Vec does not need them separated.")
-            ser = pd.concat([bls_jobs, df['title'], df['description'], df['skills_desc']], ignore_index=True)
-            
-            print("Cleaning and tokenizing each row with a helper method from Gensim. This usually takes less than 2 minutes.")
-            ser = ser.apply(self._prepare_sentence)
-            
-            print("Dropping empty rows.")
-            ser.dropna(inplace=True)
-            
-            print("Saving the cleaned data set.")
-            ser.to_json(tokenized_json_path, orient='values', indent=2)
+        df = self._jobs_df.copy()
+        
+        bls_jobs = self._get_bls_jobs()
+        
+        print("Combining the the bls.gov job list, LinkedIn job title, description and skills, columns to create a single array. Word2Vec does not need them separated.")
+        ser = pd.concat([bls_jobs, df['title'], df['description'], df['skills_desc']], ignore_index=True)
+        
+        print("Cleaning and tokenizing each row with a helper method from Gensim. This usually takes less than 2 minutes.")
+        ser = ser.apply(self.tokenize)
+        
+        print("Dropping empty rows.")
+        ser.dropna(inplace=True)
+        
+        print("Saving the cleaned data set.")
+        ser.to_pickle(self.tokenized_data_path)
 
         return ser
 
 
     def _get_or_train(self, overwrite=False):
-        vectors_path = settings.REPO_PATH +'/assets/w2v/w2v.model'        
-        m = None
-        exists = os.path.isfile(vectors_path)
-        print(exists, vectors_path)
-        print(self.dataset.head())
-        if(exists and not overwrite):
-            print("Retrieving an existing model from "+vectors_path)
-            m = Word2Vec.load(vectors_path)
-        else:
-            print("Splitting the tokenized data into an 80% training set and 20% test set.")
-            training_set, testing_set = train_test_split(self.dataset, test_size=0.2)
-            print("Training...")
-            m = Word2Vec(training_set, vector_size=300, window=5, min_count=3, workers=os.cpu_count()-1)
-            print("Saving the model.")
-            m.save(vectors_path)
+        
+        print("Splitting the tokenized data into an 80% training set and 20% test set.")
+        training_set, testing_set = train_test_split(self.get_dataset, test_size=0.2)
+        print("Training...")
+        m = Word2Vec(training_set, vector_size=300, window=5, min_count=3, workers=os.cpu_count()-1)
+        print("Saving the model.")
+        m.save(self.model_path)
             
         return m
     
@@ -82,13 +87,7 @@ class Job2Vec:
         X_test_vect = np.array([np.array([model.wv[i] for i in ls if i in words]) for ls in x_test])
     
     
-    def _prepare_sentence(self, line):
-        x = line
-        if(isinstance(x, str)):
-            x = simple_preprocess(x, deacc=True, min_len=4)
-        else:
-            x = pd.NA
-        return x
+    
 
     #From https://www.bls.gov/ooh/a-z-index.htm
     def _get_bls_jobs(self):

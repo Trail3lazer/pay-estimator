@@ -12,11 +12,11 @@ class JobPostingManager:
         self._state_abbr: dict[str,str] = None
         self._pay_cols = ['max_salary','med_salary','min_salary']
         
-        # fulltime & part time statistics are from this survey from the U.S. BUREAU OF LABOR STATISTICS https://www.bls.gov/charts/american-time-use/emp-by-ftpt-job-edu-h.htm
+        # https://www.bls.gov/charts/american-time-use/emp-by-ftpt-job-edu-h.htm
         self._fulltime = self._calculate_work_week_hours(8.42, 0.874, 5.57, 0.287)
         self._parttime = self._calculate_work_week_hours(5.54, 0.573, 5.48, 0.319)
 
-        #https://www.bls.gov/ebs/factsheets/paid-vacations.htm#:~:text=The%20number%20of%20vacation%20days,19%20days%20of%20paid%20vacation.
+        # https://www.bls.gov/ebs/factsheets/paid-vacations.htm#:~:text=The%20number%20of%20vacation%20days,19%20days%20of%20paid%20vacation.
         vacation_day_pcts = np.matrix([  
         #<5, <10, <15, <20, <25, >24
         [8,	31,	34,	18,	7,	2],
@@ -24,7 +24,9 @@ class JobPostingManager:
         [2,	8,	18,	33,	23,	17],
         [2,	8,	14,	20,	29,	28]
         ])
-        holidays = 11 # https://www.ca2.uscourts.gov/clerk/calendars/federal_holidays.html
+        
+        # https://www.ca2.uscourts.gov/clerk/calendars/federal_holidays.html
+        holidays = 11 
         weeks_off = (holidays + self._calculate_vacation_days(vacation_day_pcts))/7
         self._weeks = 52
         self._work_weeks = self._weeks - weeks_off
@@ -50,12 +52,12 @@ class JobPostingManager:
         self._salary_postings = None
     
     
-    def _create_postings(self, overwrite=False):
-        cached = settings.REPO_PATH + '/archive/clean_postings.csv'
+    def _create_postings(self, overwrite=False) -> pd.DataFrame:
+        cleaned_bin_path = settings.REPO_PATH + '/archive/clean_postings.bin'
 
-        if(os.path.isfile(cached) and not overwrite):
-            print("Retrieving an existing dataset at "+cached)
-            df = pd.read_csv(cached, index_col=0) 
+        if(os.path.isfile(cleaned_bin_path) and not overwrite):
+            print("Retrieving an existing dataset at "+cleaned_bin_path)
+            df = pd.read_pickle(cleaned_bin_path) 
         else:
             print("Reading CSV")
             df = pd.read_csv(settings.REPO_PATH + '/archive/postings.csv')
@@ -86,7 +88,7 @@ class JobPostingManager:
             df['avg_salary'] = df[self._pay_cols].mean(axis=1)
             
             print('Saving cleaned the posting table so we do not need to process it each time.')
-            df.to_csv(cached)
+            df.to_pickle(cleaned_bin_path)
         return df
     
 
