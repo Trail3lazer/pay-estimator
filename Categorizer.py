@@ -1,52 +1,76 @@
 from gensim.models import KeyedVectors
 import numpy as np
 from typing import Callable
+import logging
 
 class Categorizer:
-    def __init__(self, model_vectors: KeyedVectors, categories: dict[str, str], tokenize: Callable[[str],list[str]]):
+    def __init__(self, model_vectors: KeyedVectors, tokenize: Callable[[str],list[str]], verbosity=0):
         self.wv = model_vectors
         self.tokenize = tokenize
-        self.default_category = ''
+        self._kv = KeyedVectors(self.wv.vector_size)
+        self.default_category = None
+        self.verbosity=verbosity
+        
+        
+        
+    @property
+    def kv(self):
+        return self._kv    
+        
+        
+
+    def add_categories(self, categories: list[list[str]]):
         keys = []
         vectors = []
-        for k,v in categories:
-            tkns = tokenize(k+' '+v)
+        for category in categories:
+            if not isinstance(category, list) or len(category) == 0:
+                continue
+            tkns = self.tokenize(' '.join(category))
+            if not isinstance(tkns, list) or len(tkns) == 0:
+                if self.verbosity: logging.warning(f'Category is empty after tokenization so it will not be included. "{category}"')
+                continue
             vec = self.wv.get_mean_vector(tkns)
             vectors.append(vec)
-            keys.append(k)
-        self.kv = KeyedVectors(self.wv.vector_size)
+            keys.append(' '.join(self.tokenize(category[0])))
         self.kv.add_vectors(keys, vectors)
         
+
+    
+    def replace_vectors(self, category_vectors: KeyedVectors):
+        self.kv = category_vectors
         
+  
         
     def get_similar_categories(self, sentence: str, topn=5) -> list[tuple[str,float]]:
-        if not isinstance(sentence, str):
-            raise ValueError('Cannot calculate similar categories for missing strings.')
-        if len(sentence) == 0:
-            return []
-        tkns = self.tokenize(sentence)
+        tkns = []
+        if isinstance(sentence, str):
+            tkns = self.tokenize(sentence)
+        else:
+            raise ValueError(f'Cannot calculate similar categories for missing strings. "{sentence}"')
+        if len(tkns) == 0:
+            raise ValueError(f'Sentence is empty after tokenization so it will not be included. "{sentence}"')
         vec = self.wv.get_mean_vector(tkns)
         categories = self.kv.similar_by_vector(vec, topn)
         return categories
 
 
 
-    def categorize(self, sentence: list[str])-> tuple:
+    def categorize(self, sentence: str) -> tuple:
         similar = self.get_similar_categories(sentence, topn=1)
         if len(similar) == 0:
+            print('This did not match: ' + sentence)
             return (self.default_category, np.nan)
         return similar[0]
     
     
     
-    def categorize_list(self, senteces: list[str]) -> dict[str, list[tuple[str, str, float]]]:
-        groups: dict[str, list[tuple[str, str, float]]] = {}
-        for sentence in senteces:
+    def categorize_list(self, sentences: list[str]) -> dict[str, list[tuple[str, float]]]:
+        result = []
+        for sentence in np.array(sentences):
             category = (self.default_category, np.nan)
             if isinstance(sentence, str) and len(sentence) > 0:
                 category = self.categorize(sentence)
-            key = category[0]
-            if not key in groups:
-                groups[key] = []
-            groups[key].append((sentence, category[0], category[1]))
-        return groups
+            else:
+                print('This is not valid: ' + sentence)
+            result.append((sentence, category[0]))
+        return result

@@ -6,7 +6,7 @@ from gensim.utils import simple_preprocess
 from sklearn.model_selection import train_test_split
 
 class Job2Vec:
-    def __init__(self, jobs_df: pd.DataFrame) -> None:
+    def __init__(self, jobs_df: pd.DataFrame):
         self._dataset: np.array = None
         self._model = None
         self._jobs_df = jobs_df
@@ -14,7 +14,7 @@ class Job2Vec:
         self.model_path = settings.REPO_PATH +'/assets/w2v/w2v.model'  
             
     
-    def get_dataset(self):
+    def get_dataset(self) -> pd.Series:
         if self._dataset is None:
             if(os.path.isfile(self.tokenized_data_path)):
                 print("Retrieving an existing dataset at "+self.tokenized_data_path)
@@ -24,7 +24,7 @@ class Job2Vec:
         return self._dataset
     
     
-    def get_model(self):
+    def get_model(self) -> Word2Vec:
         if self._model is None:       
             if(os.path.isfile(self.model_path)):
                 print("Retrieving an existing model from "+self.model_path)
@@ -34,21 +34,21 @@ class Job2Vec:
         return self._model
     
     
-    def retrain(self):
+    def retrain(self) -> None:
         self._dataset = self._create_training_set(overwrite=True)
         self._model = self._get_or_train(overwrite=True)
     
     
-    def tokenize(self, sentence):
+    def tokenize(self, sentence: str) -> list[str]:
         x = sentence
         if(isinstance(x, str)):
-            x = simple_preprocess(x, deacc=True, min_len=4)
+            x = simple_preprocess(x, deacc=True, min_len=2)
         else:
             x = []
         return x
     
         
-    def _create_training_set(self, overwrite=False):
+    def _create_training_set(self, overwrite=False) -> pd.Series:
 
         df = self._jobs_df.copy()
         
@@ -69,7 +69,7 @@ class Job2Vec:
         return ser
 
 
-    def _get_or_train(self, overwrite=False):
+    def _get_or_train(self, overwrite=False) -> Word2Vec:
         
         print("Splitting the tokenized data into an 80% training set and 20% test set.")
         training_set, testing_set = train_test_split(self.get_dataset, test_size=0.2)
@@ -90,7 +90,7 @@ class Job2Vec:
     
 
     #From https://www.bls.gov/ooh/a-z-index.htm
-    def _get_bls_jobs(self):
+    def _get_bls_jobs(self) -> pd.Series:
         bls_jobs = json.load(open(settings.REPO_PATH +'/assets/bls_gov_jobs.json'))
         for i,x in enumerate(bls_jobs):
             joined = ' '.join(x)
