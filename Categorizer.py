@@ -11,14 +11,12 @@ class Categorizer:
         self.default_category = None
         self.verbosity=verbosity
         
-        
-        
     @property
     def kv(self):
         return self._kv    
         
         
-
+        
     def add_categories(self, categories: list[list[str]]):
         keys = []
         vectors = []
@@ -37,7 +35,7 @@ class Categorizer:
 
     
     def replace_vectors(self, category_vectors: KeyedVectors):
-        self.kv = category_vectors
+        self._kv = category_vectors
         
   
         
@@ -73,4 +71,17 @@ class Categorizer:
             else:
                 print('This is not valid: ' + sentence)
             result.append((sentence, category[0]))
+        return result
+    
+    
+    
+    def categorize_list_top(self, sentences: list[str]) -> dict[str, list[tuple[str, float]]]:
+        result = []
+        for sentence in np.array(sentences):
+            category = (self.default_category, np.nan)
+            if isinstance(sentence, str) and len(sentence) > 0:
+                category = self.get_similar_categories(sentence, 3)
+            else:
+                print('This is not valid: ' + sentence)
+            result.append((sentence, category[0], category[1], category[2]))
         return result
