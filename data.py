@@ -59,7 +59,7 @@ class DataManager:
     
     
     def categorize_job_titles(self, get_similar_categories: Callable[[pd.Series, int],list[tuple[str,float]]], overwrite = False):
-        if(os.path.isfile(settings.Ca) and not overwrite):
+        if(os.path.isfile(settings.CATEGORIZED_JOBS) and not overwrite):
             print("Retrieving an existing data at "+settings.CATEGORIZED_JOBS)
             df = pd.read_pickle(settings.CATEGORIZED_JOBS)
             return df
