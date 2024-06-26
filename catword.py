@@ -1,7 +1,7 @@
 from gensim.models import KeyedVectors
 import numpy as np
 from typing import Callable
-import logging
+import logging, os, settings, json
 
 class Categorizer:
     def __init__(self, model_vectors: KeyedVectors, tokenize: Callable[[str],list[str]], verbosity=0):
@@ -85,3 +85,34 @@ class Categorizer:
                 print('This is not valid: ' + sentence)
             result.append((sentence, category[0], category[1], category[2]))
         return result
+    
+    
+    
+    def create_categories(self):
+
+        if os.path.isfile(settings.CATEGORY_VECS):
+            print("Retrieving category vectors from "+settings.CATEGORY_VECS)
+            self.replace_vectors(KeyedVectors.load(settings.CATEGORY_VECS))
+            return
+        
+        print('Creating categories.')
+        categories = json.load(open(settings.BLS_JOBS))
+        groups: dict[str, list[str]] = {}
+        for x in categories:
+            category = x[0]
+            title = None
+            if len(x) > 1:
+                category = x[1]
+                title = x[0]
+            if not category in groups:
+                 groups[category] = []
+            if title:
+                groups[category].append(title)
+
+        categories = [[k] for k,v in list(groups.items())]
+
+        print('Creating KeyedVectors from the category names.')
+        self.add_categories(categories)
+
+        print('Saving the KeyedVectors.')
+        self.kv.save(settings.CATEGORY_VECS)
