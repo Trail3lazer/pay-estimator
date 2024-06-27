@@ -3,20 +3,19 @@ import torch
 
 #https://jonnylaw.rocks/posts/2021-08-04-entity-embeddings/
 class EntityEmbedding(nn.Module):
-    def __init__(self, cats: dict[str,int], 
-                 conts: dict[str,int],  
+    def __init__(self, 
+                 cats: dict[str,int], 
+                 conts_count: int,  
                  emb_sizes: dict[str,int], 
                  hidden_layer_dim = 100):
         super().__init__()
-        device = torch.get_device('cuda')
-        
-        self.emb_module = nn.ModuleList(nn.Embedding(v+1, emb_sizes[k]) for k,v in cats)
-        total_emb_size = sum(emb_sizes.values())
-        self.l1 = nn.Linear(in_features=total_emb_size, out_features=hidden_layer_dim)
-        self.l2 = nn.Linear(in_features=len(conts), out_features=hidden_layer_dim)
+        self.emb_module = nn.ModuleList(nn.Embedding(cats[k],emb_sizes[k]) for k in cats)
+        total_emb_size = sum(cats.values())
+        self.l1 = nn.Linear(total_emb_size, hidden_layer_dim)
+        self.l2 = nn.Linear(conts_count, hidden_layer_dim)
         self.relu = nn.ReLU()
-        out_count = len(cats)+len(conts)
-        self.out = nn.Linear(2 * hidden_layer_dim, out_count)
+        out_count = len(cats)+conts_count
+        self.out = nn.Linear((2 * hidden_layer_dim), out_features=out_count)
 
     def forward(self, cat, cont):
         x_cat = [emb(cat[:, i]) for i, emb in enumerate(self.emb_module)]
