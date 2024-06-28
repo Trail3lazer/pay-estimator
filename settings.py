@@ -14,3 +14,5 @@ W2V_MODEL = REPO_PATH +'/assets/w2v/w2v.model'
 CATEGORY_VECS = REPO_PATH + '/assets/w2v/vectorized_categories.bin'
 
 CATEGORIZED_JOBS = REPO_PATH + '/archive/categorized_job_titles.bin' 
+
+ENTEMB_MODEL = REPO_PATH + 'assets/entemb/entemb.model'
