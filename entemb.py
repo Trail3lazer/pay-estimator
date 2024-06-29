@@ -1,27 +1,55 @@
-import torch.nn as nn
-import torch
+from keras import layers, losses, optimizers
+from keras import Model
+from keras import saving
+import os
+import settings
+from typing import Dict
 
-#https://jonnylaw.rocks/posts/2021-08-04-entity-embeddings/
-class EntityEmbedding(nn.Module):
-    def __init__(self, 
-                 cats: dict[str,int], 
-                 conts_count: int,  
-                 emb_sizes: dict[str,int], 
-                 hidden_layer_dim = 100):
-        super().__init__()
-        self.emb_module = nn.ModuleList(nn.Embedding(cats[k],emb_sizes[k]) for k in cats)
-        total_emb_size = sum(cats.values())
-        self.l1 = nn.Linear(total_emb_size, hidden_layer_dim)
-        self.l2 = nn.Linear(conts_count, hidden_layer_dim)
-        self.relu = nn.ReLU()
-        out_count = len(cats)+conts_count
-        self.out = nn.Linear((2 * hidden_layer_dim), out_features=out_count)
+def get_or_create_entity_embeddings(
+    df: dict[str, list] = None, 
+    cat_cols: list[str] = [], 
+    cont_cols: list[str] = [], 
+    min_embs: int = 50
+    ):
+    
+    if(os.path.isfile(settings.ENTEMB_MODEL)):
+        print("Retrieving an existing entity embedding model from "+settings.ENTEMB_MODEL)
+        model = saving.load_model(settings.ENTEMB_MODEL)
+    else: 
+        model = create_entity_embeddings(df, cat_cols, cont_cols, min_embs=50)
+        model.save(settings.ENTEMB_MODEL)
+    return model
 
-    def forward(self, cat, cont):
-        x_cat = [emb(cat[:, i]) for i, emb in enumerate(self.emb_module)]
-        x_cat = torch.cat(x_cat, dim=1)
-        x_cat = self.l1(x_cat)
-        x_cont = self.l2(cont)
-        x = torch.cat([x_cont, x_cat.squeeze()], dim=1)
-        x = self.relu(x)
-        return self.out(x)  
+def create_entity_embeddings(
+    df: dict[str, list] = None, 
+    cat_cols: list[str] = [], 
+    cont_cols: list[str] = [], 
+    min_embs: int = 50
+    ):
+    
+    cats_len = {col: df[col].nunique() for col in cat_cols}
+    cats_emb = {col: min(min_embs,(cats_len[col]//2+1)) for col in cat_cols}
+    
+    inputs = []
+    concat = []
+    
+    for cat in cat_cols:
+        input = layers.Input(shape=(1,), name=cat)
+        inputs.append(input)
+        embedding = layers.Embedding((cats_len[cat]+1), cats_emb[cat], name='embeddings')(input)
+        embedding = layers.Reshape((cats_emb[cat],))(embedding)
+        concat.append(embedding)
+        
+    for cont in cont_cols:
+        input = layers.Input(shape=(1,), name=cont)
+        inputs.append(input)
+        concat.append(input)
+        
+    lays = layers.Concatenate()(concat)
+    lays = layers.Dense(100, activation= 'relu')(lays)
+    lays = layers.Dense(1)(lays)
+    
+    model = Model(inputs, lays)
+    model.compile(loss=losses.MSLE, optimizer=optimizers.Adam(), metrics=[losses.MSLE])
+    
+    return model

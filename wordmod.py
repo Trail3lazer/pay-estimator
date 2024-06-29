@@ -10,6 +10,7 @@ class Job2Vec:
         self._jobs_df: pd.DataFrame = None
         self._dataset: pd.Series = None
         self._model = None
+        self._default_vec: list[float] = None
     
     
     
@@ -53,6 +54,24 @@ class Job2Vec:
         return x
     
     
+    
+    def vectorize(self, sentence: str) -> list[float] | None:
+        if not self._default_vec:
+            self._default_vec = [0] * self.get_vector_length()
+        
+        if isinstance(sentence, str):
+            tkns = self.tokenize(sentence)
+            if len(tkns) > 0:
+                return self.get_model().wv.get_mean_vector(tkns)
+            
+        return self._default_vec
+    
+    
+        
+    def get_vector_length(self):
+        return self.get_model().wv.vector_size
+        
+        
         
     def _create_training_set(self, overwrite=False) -> pd.Series:
         df = self._jobs_df.copy()
@@ -82,7 +101,9 @@ class Job2Vec:
         m = Word2Vec(training_set, vector_size=300, window=5, min_count=3, workers=os.cpu_count()-1)
         print("Saving the model.")
         m.save(self.model_path)
-            
+        
+        self.test_model(m, training_set, testing_set)
+        
         return m
     
     
@@ -91,6 +112,8 @@ class Job2Vec:
         words = set(model.wv.index_to_key)
         X_train_vect = np.array([np.array([model.wv[i] for i in ls if i in words]) for ls in x_train])
         X_test_vect = np.array([np.array([model.wv[i] for i in ls if i in words]) for ls in x_test])
+        print(X_train_vect)
+        print(X_test_vect)
     
     
     

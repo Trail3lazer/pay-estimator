@@ -11,6 +11,7 @@ CLEANED_JOBS = REPO_PATH + '/archive/clean_postings.bin'
 TOKENIZED_JOBS = REPO_PATH +'/archive/tokenized_jobs.bin'
 W2V_MODEL = REPO_PATH +'/assets/w2v/w2v.model'
 
+JOB_CATEGORIES = REPO_PATH + '/assets/job_categories.json'
 CATEGORY_VECS = REPO_PATH + '/assets/w2v/vectorized_categories.bin'
 
 CATEGORIZED_JOBS = REPO_PATH + '/archive/categorized_job_titles.bin' 

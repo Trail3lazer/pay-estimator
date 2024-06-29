@@ -1,4 +1,5 @@
 from gensim.models import KeyedVectors
+import pandas as pd
 import numpy as np
 from typing import Callable
 import logging, os, settings, json
@@ -7,13 +8,12 @@ class Categorizer:
     def __init__(self, model_vectors: KeyedVectors, tokenize: Callable[[str],list[str]], verbosity=0):
         self.wv = model_vectors
         self.tokenize = tokenize
-        self._kv = KeyedVectors(self.wv.vector_size)
-        self.default_category = None
+        self.kv = KeyedVectors(self.wv.vector_size)
+        self.default_category:str = None
         self.verbosity=verbosity
-        
-    @property
-    def kv(self):
-        return self._kv    
+        self.category_vectors: pd.Series[list[float]] = None
+        self.category_labels: pd.Series[str] = None
+        self.categories_created = False
         
         
         
@@ -31,6 +31,7 @@ class Categorizer:
             vectors.append(vec)
             keys.append(' '.join(self.tokenize(category[0])))
         self.kv.add_vectors(keys, vectors)
+        self._category_vectors = pd.Series(vectors, index=keys)
         
 
     
@@ -88,7 +89,7 @@ class Categorizer:
     
     
     
-    def create_categories(self):
+    def create_category_vectors(self):
 
         if os.path.isfile(settings.CATEGORY_VECS):
             print("Retrieving category vectors from "+settings.CATEGORY_VECS)
@@ -96,9 +97,33 @@ class Categorizer:
             return
         
         print('Creating categories.')
-        categories = json.load(open(settings.BLS_JOBS))
+        categories = self.get_category_labels()
+
+        print('Creating KeyedVectors from the category names.')
+        self.add_categories(categories)
+
+        print('Saving the KeyedVectors.')
+        self.kv.save(settings.CATEGORY_VECS)
+        
+        self.categories_created = True
+    
+    
+    
+    def get_category_labels(self) -> list[str]:
+        
+        if self.category_labels:
+            return self.category_labels
+        
+        if os.path.isfile(settings.JOB_CATEGORIES):
+            print("Retrieving category labels from "+settings.JOB_CATEGORIES)
+            self.category_labels = pd.read_json(settings.JOB_CATEGORIES, typ='series', orient='values')
+            return self.category_labels
+        
+        print('Creating categories.')
+        jobs = json.load(open(settings.BLS_JOBS))
+        
         groups: dict[str, list[str]] = {}
-        for x in categories:
+        for x in jobs:
             category = x[0]
             title = None
             if len(x) > 1:
@@ -109,10 +134,26 @@ class Categorizer:
             if title:
                 groups[category].append(title)
 
-        categories = [[k] for k,v in list(groups.items())]
-
-        print('Creating KeyedVectors from the category names.')
-        self.add_categories(categories)
-
-        print('Saving the KeyedVectors.')
-        self.kv.save(settings.CATEGORY_VECS)
+        self.category_labels = pd.Series(groups.keys())
+        
+        self.category_labels.to_json(settings.JOB_CATEGORIES, indent=2)
+        
+        return self.category_labels
+        
+    
+    
+    def get_category_vectors(self):
+        if os.path.isfile(settings.CATEGORY_VECS):
+            print("Retrieving category labels from "+settings.CATEGORY_VECS)
+            self.category_labels = pd.read_json(settings.CATEGORY_VECS)
+            
+            return self.category_labels
+        
+        labels = self.get_category_labels()
+        if not self.categories_created:
+            self.create_category_vectors()
+        vecs = [self.kv.get_vector(name) for name in labels]
+        cat_vecs = pd.DataFrame(vecs, index=labels)
+        
+        
+        
