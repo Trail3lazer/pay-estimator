@@ -63,6 +63,15 @@ class Categorizer:
     
     
     
+    def categorize_to_vec(self, sentence: str) -> tuple:
+        similar = self.get_similar_categories(sentence, topn=1)
+        if len(similar) == 0:
+            print('This did not match: ' + sentence)
+            return (self.default_category, np.nan)
+        return self.kv.get_index(similar[0][0])
+    
+    
+    
     def categorize_list(self, sentences: list[str]) -> dict[str, list[tuple[str, float]]]:
         result = []
         for sentence in np.array(sentences):
