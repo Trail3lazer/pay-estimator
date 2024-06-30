@@ -8,13 +8,16 @@ STATE_ABBR = REPO_PATH + '/assets/state_abbr.json' #This file was modified from 
 POSTINGS = REPO_PATH + '/archive/postings.csv'
 COMPANIES = REPO_PATH + '/archive/companies/companies.csv'
 COMPANY_INDUSTRIES = REPO_PATH + '/archive/companies/company_industries.csv'
-COMPANY_SPECIALTIES = REPO_PATH + '/archive/companies/company_specialties.csv'
+COMPANY_SPECIALITIES = REPO_PATH + '/archive/companies/company_specialities.csv'
+EMPLOYEES = REPO_PATH + '/archive/companies/employee_counts.csv'
 BENEFITS = REPO_PATH + '/archive/jobs/benefits.csv'
 JOB_SKILLS = REPO_PATH + '/archive/jobs/job_skills.csv'
 JOB_INDUSTRIES = REPO_PATH + '/archive/jobs/job_industries.csv'
 SALARIES = REPO_PATH + '/archive/jobs/salaries.csv'
 SKILLS = REPO_PATH + '/archive/mappings/skills.csv'
 INDUSTRIES = REPO_PATH + '/archive/mappings/industries.csv'
+
+COMBINED_DATA = REPO_PATH + '/archive/data.lz4'
 
 CLEANED_JOBS = REPO_PATH + '/archive/clean_postings.bin'
 

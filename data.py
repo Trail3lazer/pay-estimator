@@ -1,6 +1,7 @@
 import os, json, re, settings
 import pandas as pd 
 import numpy as np 
+import pyarrow.feather as fe
 from scipy import stats 
 from typing import Callable
 
@@ -88,33 +89,129 @@ class DataManager:
         df.to_pickle(settings.CATEGORIZED_JOBS)
         return df
     
+    def get(self, path, index_col=None):
+        fpath = path+'.lz4'
+        df = None
+        if os.path.isfile(fpath):
+            df = fe.read_feather(fpath)
+        elif os.path.isfile(path):
+            df = pd.read_csv(path, index_col=index_col)
+            fe.write_feather(df, fpath)
+        return df
     
 
-    def load_data_files():
-        postings = pd.read_csv(settings.POSTINGS, index_col='job_id')
-        companies = pd.read_csv(settings.COMPANIES, index_col='company_id')
-        company_industries = pd.read_csv(settings.COMPANY_INDUSTRIES, index_col='company_id')
-        company_specialties = pd.read_csv(settings.COMPANY_SPECIALTIES, index_col='company_id')
-        benefits = pd.read_csv(settings.BENEFITS, index_col='job_id')
-        job_skills = pd.read_csv(settings.JOB_SKILLS, index_col='job_id')
-        job_industries = pd.read_csv(settings.JOB_INDUSTRIES, index_col='job_id')
-        salaries = pd.read_csv(settings.SALARIES, index_col='job_id')
-        industries = pd.read_csv(settings.INDUSTRIES, index_col='industry_id')
-        skills = pd.read_csv(settings.SKILLS, index_col='skill_abr')
+    def load_data_files(self):
         
+        print("Reading CSVs")
+        postings = self.get(settings.POSTINGS, index_col='job_id')
+        companies = self.get(settings.COMPANIES, index_col='company_id')
+        company_industries = self.get(settings.COMPANY_INDUSTRIES, index_col='company_id')
+        company_specialties = self.get(settings.COMPANY_SPECIALITIES, index_col='company_id')
+        company_employees = self.get(settings.EMPLOYEES, index_col='company_id')
+        benefits = self.get(settings.BENEFITS, index_col='job_id')
+        job_skills = self.get(settings.JOB_SKILLS, index_col='job_id')
+        job_industries = self.get(settings.JOB_INDUSTRIES, index_col='job_id')
+        salaries = self.get(settings.SALARIES, index_col='job_id')
+        industries = self.get(settings.INDUSTRIES, index_col='industry_id')
+        skills = self.get(settings.SKILLS, index_col='skill_abr')
+        
+        print("Joining CSV tables")
         job_industries = job_industries.join(industries, on='industry_id')
         job_skills = job_skills.join(skills, on='skill_abr')
         
         cdf = companies.join(company_industries, on='company_id')
         cdf = cdf.join(company_specialties, on='company_id')
+        cdf = cdf.join(company_employees)
         
         df = postings.join(benefits, on='job_id')
         df = df.join(job_skills, on='job_id')
         df = df.join(job_industries, on='job_id')
-        df = df.join(salaries, on='job_id')
+        df = df.join(salaries, on='job_id', rsuffix='_0')
+        df = df.join(cdf, on='company_id', rsuffix='_comp')
         
-        df = df.join(cdf, on='company_id')
-        df.pi
+        print("Dropping unhelpful columns.")
+        df = df.drop(axis=0,columns=[
+            'company_id',
+            'time_recorded',
+            'original_listed_time',
+            'job_posting_url',
+            'application_url',
+            'application_type',
+            'expiry',
+            'closed_time',
+            'listed_time',
+            'posting_domain',
+            'work_type',
+            'currency',
+            'currency_0',
+            'salary_id',
+            'industry_id',
+            'sponsored',
+            'time_recorded',
+            'remote_allowed',
+            'skill_abr',
+            'views',
+            'applies',
+            'follower_count',
+            'address',
+            'country',
+            'city',
+            'zip_code',
+            'url'
+        ])
+        
+        print("Renaming confusing columns.")
+        df = df.rename(columns={
+            #'name':                       'company_name',
+            'type':                       'benefit_type',
+            'inferred':                   'benefit_inferred',
+            'formatted_experience_level': 'experience_level',
+            'formatted_work_type':        'work_type',
+            'title':                      'job_title',
+            'description_comp':           'company_desc',
+            'description':                'job_desc',
+            'industry':                   'company_industry',
+            'industry_name':              'job_industry'
+        })
+        
+        print(df.info())
+        
+        print("Deduping columns.")
+        # joining skill_name, speciality, benefit_type
+        groups = df.groupby(
+            by=[
+                'company_name',
+                'company_desc',
+                'company_industry',
+                'company_size',
+                'employee_count',
+                'job_title',
+                'job_desc',
+                'job_industry',
+                'work_type',
+                'skills_desc',
+                'experience_level',
+                'benefit_inferred',
+                'location',
+                'state',
+                'experience_level',
+                'work_type',
+                'max_salary',
+                'max_salary_0',
+                'med_salary',
+                'med_salary_0',
+                'min_salary',
+                'min_salary_0',
+                'pay_period',
+                'pay_period_0',
+                'compensation_type',
+                'compensation_type_0'],
+            group_keys=False
+        )
+        #.apply(lambda x: ','.join(x.values))
+        
+        #fe.write_feather(df, settings.COMBINED_DATA)
+        return df
         
     
     
@@ -125,17 +222,8 @@ class DataManager:
             df = pd.read_pickle(settings.CLEANED_JOBS) 
             return df
         
-        print("Reading CSV")
-        df = pd.read_csv(settings.POSTINGS)
+        df = self.load_data_files()
         
-        columns_to_drop = [
-            'job_id','company_id','currency','views','applies','original_listed_time',
-            'remote_allowed','job_posting_url','application_url','application_type',
-            'expiry','closed_time','listed_time','posting_domain','sponsored',
-            'compensation_type','sponsored',
-            ]
-        
-        print("Dropping unhelpful columns: "+str(columns_to_drop))
         df.drop(columns_to_drop, axis=1, inplace=True)
         
         print("Reading the state abbreviation json map.")
@@ -158,11 +246,6 @@ class DataManager:
         print('Saving cleaned the posting table so we do not need to process it each time.')
         df.to_pickle(settings.CLEANED_JOBS)
         return df
-    
-    
-    
-    
-    
     
     
 
