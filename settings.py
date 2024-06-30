@@ -1,6 +1,6 @@
 import os
 
-REPO_PATH = os.path.abspath('')
+REPO_PATH = os.path.abspath('./job-estimator')
 
 BLS_JOBS = REPO_PATH +'/assets/bls_gov_jobs.json' #From https://www.bls.gov/ooh/a-z-index.htm
 STATE_ABBR = REPO_PATH + '/assets/state_abbr.json' #This file was modified from this github gist https://gist.github.com/JeffPaine/3083347
@@ -17,16 +17,17 @@ SALARIES = REPO_PATH + '/archive/jobs/salaries.csv'
 SKILLS = REPO_PATH + '/archive/mappings/skills.csv'
 INDUSTRIES = REPO_PATH + '/archive/mappings/industries.csv'
 
-COMBINED_DATA = REPO_PATH + '/archive/data.lz4'
+COMBINED_DATA = REPO_PATH + '/archive/app/data.lz4'
 
-CLEANED_JOBS = REPO_PATH + '/archive/clean_postings.bin'
+CLEANED_JOBS = REPO_PATH + '/archive/app/clean_postings.pqt'
 
-TOKENIZED_JOBS = REPO_PATH +'/archive/tokenized_jobs.bin'
+TOKENIZED_JOBS = REPO_PATH +'/archive/app/tokenized_jobs.pqt'
 W2V_MODEL = REPO_PATH +'/assets/w2v/w2v.model'
 
 JOB_CATEGORIES = REPO_PATH + '/assets/job_categories.json'
+JOB_FIELDS = REPO_PATH + '/assets/job_fields.json'
 CATEGORY_VECS = REPO_PATH + '/assets/w2v/vectorized_categories.bin'
 
-CATEGORIZED_JOBS = REPO_PATH + '/archive/categorized_job_titles.bin' 
+CATEGORIZED_JOBS = REPO_PATH + '/archive/app/categorized_job_titles.pqt' 
 
 ENTEMB_MODEL = REPO_PATH + 'assets/entemb/entemb.model'

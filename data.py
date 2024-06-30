@@ -1,9 +1,10 @@
 import os, json, re, settings
 import pandas as pd 
 import numpy as np 
-import pyarrow.feather as fe
+import dask.dataframe as dd
 from scipy import stats 
 from typing import Callable
+from csv import QUOTE_NONE
 
 class DataManager:
         
@@ -13,6 +14,7 @@ class DataManager:
         self._postings_with_pay: pd.DataFrame = None
         self._state_abbr: dict[str,str] = None
         self._pay_cols = ['max_salary','med_salary','min_salary']
+        self._bckt_size = 10000
         
         # https://www.bls.gov/charts/american-time-use/emp-by-ftpt-job-edu-h.htm
         self._fulltime = self._calculate_work_week_hours(8.42, 0.874, 5.57, 0.287)
@@ -89,48 +91,55 @@ class DataManager:
         df.to_pickle(settings.CATEGORIZED_JOBS)
         return df
     
-    def get(self, path, index_col=None):
-        fpath = path+'.lz4'
-        df = None
+    
+    
+    def get(self, path: str, index_col=None):
+        fpath = path.replace('.csv','.pqt')
+        df: pd.DataFrame = None
         if os.path.isfile(fpath):
-            df = fe.read_feather(fpath)
+            df = dd.read_parquet(fpath)
         elif os.path.isfile(path):
-            df = pd.read_csv(path, index_col=index_col)
-            fe.write_feather(df, fpath)
+            try:
+                df = pd.read_csv(path,
+                                 #quoting=QUOTE_NONE,
+                                 on_bad_lines='warn',
+                                 #sample=2**20
+                                 ).set_index(index_col)
+            except (Exception) as detail: 
+                print(path, detail)
+            df.to_parquet(fpath)
+            os.remove(path)
         return df
     
-
-    def load_data_files(self):
+    
+    
+    def load_additional_tables(self):
+        industries = self.get(settings.INDUSTRIES, index_col='industry_id')
+        skills = self.get(settings.SKILLS, index_col='skill_abr')
+        benefits = self.get(settings.BENEFITS, index_col='job_id')
+        company_industries = self.get(settings.COMPANY_INDUSTRIES, index_col='company_id')
+        company_specialities = self.get(settings.COMPANY_SPECIALITIES, index_col='company_id')
         
+        return benefits,skills,industries,company_industries,company_specialities
+
+
+
+    def load_data_files(self) -> pd.DataFrame:
         print("Reading CSVs")
         postings = self.get(settings.POSTINGS, index_col='job_id')
         companies = self.get(settings.COMPANIES, index_col='company_id')
-        company_industries = self.get(settings.COMPANY_INDUSTRIES, index_col='company_id')
-        company_specialties = self.get(settings.COMPANY_SPECIALITIES, index_col='company_id')
         company_employees = self.get(settings.EMPLOYEES, index_col='company_id')
-        benefits = self.get(settings.BENEFITS, index_col='job_id')
-        job_skills = self.get(settings.JOB_SKILLS, index_col='job_id')
-        job_industries = self.get(settings.JOB_INDUSTRIES, index_col='job_id')
         salaries = self.get(settings.SALARIES, index_col='job_id')
-        industries = self.get(settings.INDUSTRIES, index_col='industry_id')
-        skills = self.get(settings.SKILLS, index_col='skill_abr')
         
         print("Joining CSV tables")
-        job_industries = job_industries.join(industries, on='industry_id')
-        job_skills = job_skills.join(skills, on='skill_abr')
-        
-        cdf = companies.join(company_industries, on='company_id')
-        cdf = cdf.join(company_specialties, on='company_id')
-        cdf = cdf.join(company_employees)
-        
-        df = postings.join(benefits, on='job_id')
-        df = df.join(job_skills, on='job_id')
-        df = df.join(job_industries, on='job_id')
-        df = df.join(salaries, on='job_id', rsuffix='_0')
+        cdf = companies.join(company_employees)
+        #cdf = cdf.join(company_industries, on='company_id')
+        #cdf = cdf.join(company_specialties, on='company_id')
+        df = postings.join(salaries, on='job_id', rsuffix='0')
         df = df.join(cdf, on='company_id', rsuffix='_comp')
         
         print("Dropping unhelpful columns.")
-        df = df.drop(axis=0,columns=[
+        df = df.drop(axis=0, columns=[
             'company_id',
             'time_recorded',
             'original_listed_time',
@@ -143,13 +152,13 @@ class DataManager:
             'posting_domain',
             'work_type',
             'currency',
-            'currency_0',
+            'currency0',
             'salary_id',
-            'industry_id',
+            #'industry_id',
             'sponsored',
             'time_recorded',
             'remote_allowed',
-            'skill_abr',
+            #'skill_abr',
             'views',
             'applies',
             'follower_count',
@@ -171,68 +180,54 @@ class DataManager:
             'description_comp':           'company_desc',
             'description':                'job_desc',
             'industry':                   'company_industry',
-            'industry_name':              'job_industry'
+            #'industry_name':              'job_industry'
         })
+                
+        def agg_groups(x):
+            x['benefit_type'] = ','.join(x['benefit_type'].values)
+            x['benefit_type'] = ','.join(x['benefit_type'].values)
+            x['benefit_type'] = ','.join(x['benefit_type'].values)
+            return x
         
-        print(df.info())
         
-        print("Deduping columns.")
+        #print("Deduping columns.")
         # joining skill_name, speciality, benefit_type
-        groups = df.groupby(
-            by=[
-                'company_name',
-                'company_desc',
-                'company_industry',
-                'company_size',
-                'employee_count',
-                'job_title',
-                'job_desc',
-                'job_industry',
-                'work_type',
-                'skills_desc',
-                'experience_level',
-                'benefit_inferred',
-                'location',
-                'state',
-                'experience_level',
-                'work_type',
-                'max_salary',
-                'max_salary_0',
-                'med_salary',
-                'med_salary_0',
-                'min_salary',
-                'min_salary_0',
-                'pay_period',
-                'pay_period_0',
-                'compensation_type',
-                'compensation_type_0'],
-            group_keys=False
-        )
-        #.apply(lambda x: ','.join(x.values))
+        # groups = df.groupby(
+        #     by=['company_name','company_desc','company_industry','company_size',
+        #         'employee_count','job_title','job_desc','job_industry','work_type',
+        #         'skills_desc','experience_level','benefit_inferred','location',
+        #         'state','experience_level','work_type','max_salary','max_salary_0',
+        #         'med_salary','med_salary_0','min_salary','min_salary_0',
+        #         'pay_period','pay_period_0','compensation_type','compensation_type_0'],
+        #     group_keys=False
+        # ).aggregate(agg_groups)
         
-        #fe.write_feather(df, settings.COMBINED_DATA)
-        return df
+        return df.compute() # Yes this gets rid of the benefits of Dask lazy loading data but I don't have time to refactor all the code to make it work with lazy loading.
         
+    
+    
+    def get_bls_jobs(self) -> pd.Series:
+        bls_jobs = json.load(open(settings.BLS_JOBS))
+        for i,x in enumerate(bls_jobs):
+            joined = ' '.join(x)
+            bls_jobs[i] = pd.NA if len(joined) < 4 else joined
+        return pd.Series(bls_jobs).dropna()
     
     
     
     def _create_postings(self, overwrite=False) -> pd.DataFrame:
         if(os.path.isfile(settings.CLEANED_JOBS) and not overwrite):
             print("Retrieving an existing dataset at "+settings.CLEANED_JOBS)
-            df = pd.read_pickle(settings.CLEANED_JOBS) 
+            df = dd.read_parquet(settings.CLEANED_JOBS) 
             return df
         
-        df = self.load_data_files()
+        df: pd.DataFrame = self.load_data_files()
         
-        df.drop(columns_to_drop, axis=1, inplace=True)
+        unique_states = [st for st in df['state'].unique() if isinstance(st, str) and len(st) > 2]
+        print(list(unique_states))
         
-        print("Reading the state abbreviation json map.")
-        if(self._state_abbr is None): 
-            self._state_abbr = dict(json.load(open(settings.STATE_ABBR)))
-            
         print("Creating a state abbreviation column from the location column and normalizing the pay columns.")
-        df['state'] = ''
-        df: pd.DataFrame = df.apply(self._normalize_row, axis=1)
+        df = df.apply(self._normalize_row, axis=1)
         
         print("Setting outlier pay column values to NaN.")
         for name in self._pay_cols:
@@ -241,30 +236,47 @@ class DataManager:
             df[name] = df[name].mask(mask, np.NaN)
             
         print("Creating an average salary column that is is the average of the salary pay columns. "+str(self._pay_cols))
-        df['avg_salary'] = df[self._pay_cols].mean(axis=1)
+        mean = df[self._pay_cols].mean(axis=1).to_numpy()
+        quotient = mean / self._bckt_size
+        rounded = np.ceil(quotient) 
+        df['pay_bucket'] = rounded * self._bckt_size
         
         print('Saving cleaned the posting table so we do not need to process it each time.')
-        df.to_pickle(settings.CLEANED_JOBS)
+        df.to_parquet(settings.CLEANED_JOBS)
         return df
     
     
-
+    
+    def _get_state_abbr_file(self):
+        #print("Reading the state abbreviation json map.")
+        if(self._state_abbr is None): 
+            self._state_abbr = dict(json.load(open(settings.STATE_ABBR)))
+        return self._state_abbr
+    
+    
+    
     def _update_pay(self, row, mult):
         for c in self._pay_cols:
-            if row[c] != row[c]:
+            if not isinstance(row[c], float):
                 continue
-            row[c] = row[c] * mult
+            row[c] = (row[c] * mult)
 
 
 
     def _clean_pay(self, row):
-        pay_period = row['pay_period']
+        pay_period:str = row['pay_period']
+        if(not isinstance(pay_period, str)):
+            return row
         if pay_period == 'MONTHLY': 
             self._update_pay(row, self._months)
         elif pay_period == 'WEEKLY': 
             self._update_pay(row, self._weeks)
         elif pay_period == 'HOURLY':
-            hours = (self._parttime if row['work_type'] == 'PART_TIME' else self._fulltime) * self._work_weeks
+            work_type = row['work_type']
+            if isinstance(work_type, str) and work_type == 'PART_TIME':
+                hours = self._parttime * self._work_weeks
+            else: 
+                hours = self._fulltime * self._work_weeks
             for c in self._pay_cols:
                 if row[c] != row[c]:
                     continue
@@ -280,26 +292,62 @@ class DataManager:
 
 
 
-    def _clean_state(self, row):    
-        if row['location'] != row['location']: 
-            return row
-        
-        location = row['location'].strip().split(',')
-        if len(location) == 0:
-            return row
-        
-        state = ''
-        if len(location) > 1:
-            state = location[1].strip().upper()
-            
-        if len(state) != 2:
-            for k in self._state_abbr.keys():
-                result = re.search(k, row['location'], flags=re.I)
-                if result is not None:
-                    state = self._state_abbr.get(k)
-                    break
+    def try_get_state_abbr(self, location):
+        location = self._clean_loc_str(location)
+        for k in self._get_state_abbr_file().keys():
+            result = re.search(k, location, flags=re.I)
+            if result is not None:
+                return self._state_abbr.get(k)
+        for v in self._state_abbr.values():
+            result = re.search(f'{v}', location, flags=re.I)
+            if result is not None:
+                return self._state_abbr.get(v)
                 
-        if state != None and len(state) == 2:
+
+
+    
+    def _clean_loc_str(self, loc: str):
+        if not isinstance(loc, str):
+            return loc
+        loc = loc.strip().upper()
+        loc = loc.replace('.','')
+        return loc
+    
+    
+    def _is_valid_state(self, state):
+        isinstance(state, str) and len(state) == 2
+    
+
+
+    def _clean_state(self, row):
+        hasLocationData = isinstance(row['location'], str) or isinstance(row['state'], str)
+        if not isinstance(row, pd.Series) or not hasLocationData: 
+            return row
+            
+        state = ''
+        
+        if isinstance(row['location'], str):
+
+            location = row['location'].split(',')
+            
+            if len(location) > 1:
+                state = self._clean_loc_str(location[1])
+            else:
+                state = self._clean_loc_str(location[0])
+
+            if len(state) != 2:
+                state = self.try_get_state_abbr(row['location'])
+        
+        state_valid = self._is_valid_state(state)
+        
+        if not state_valid and isinstance(row['state'], str):
+            
+            state = self._clean_loc_str(row['state'])
+            
+            if len(state) != 2:
+                state = self.try_get_state_abbr(state)
+        
+        if self._is_valid_state(state):
             row['state'] = state
         else:
             row['state'] = None
