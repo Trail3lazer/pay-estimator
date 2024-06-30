@@ -257,9 +257,10 @@ class DataManager:
     
     def _update_pay(self, row, mult):
         for c in self._pay_cols:
-            if not isinstance(row[c], float):
-                continue
-            row[c] = (row[c] * mult)
+            if isinstance(row[c], float):
+                row[c] = (row[c] * mult)
+            elif isinstance(row[c+'0'], str):
+                row[c] = (row[c+'0'] * mult)
 
 
 
