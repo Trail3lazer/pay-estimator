@@ -13,6 +13,8 @@ class DataManager:
         self._postings: pd.DataFrame = None
         self._postings_with_pay: pd.DataFrame = None
         self._state_abbr: dict[str,str] = None
+        self._state_abbr_re: re.Pattern = None
+        self._state_name_re: re.Pattern = None
         self._pay_cols = ['max_salary','med_salary','min_salary']
         self._bckt_size = 10000
         
@@ -251,6 +253,8 @@ class DataManager:
         #print("Reading the state abbreviation json map.")
         if(self._state_abbr is None): 
             self._state_abbr = dict(json.load(open(settings.STATE_ABBR)))
+            self._state_abbr_re = re.compile(r'[^\b](' + '|'.join(self._state_abbr.values()) + r')[\b$]', re.IGNORECASE)
+            self._state_name_re = re.compile(r'[^\b](' + '|'.join(self._state_abbr.keys()) + r')[\b$]', re.IGNORECASE)
         return self._state_abbr
     
     
@@ -294,16 +298,17 @@ class DataManager:
 
 
     def try_get_state_abbr(self, location):
+        self._get_state_abbr_file()
         location = self._clean_loc_str(location)
-        for k in self._get_state_abbr_file().keys():
-            result = re.search(k, location, flags=re.I)
-            if result is not None:
-                return self._state_abbr.get(k)
-        for v in self._state_abbr.values():
-            result = re.search(f'{v}', location, flags=re.I)
-            if result is not None:
-                return self._state_abbr.get(v)
-                
+        name_match = self._state_name_re.match(location)
+        if name_match is not None:
+            return self._state_abbr.get(name_match.string)  
+        
+        abbr_match = self._state_abbr_re.match(location)
+        if abbr_match is not None:
+            return abbr_match.string
+        
+        return location     
 
 
     
@@ -315,8 +320,9 @@ class DataManager:
         return loc
     
     
+    
     def _is_valid_state(self, state):
-        isinstance(state, str) and len(state) == 2
+        return isinstance(state, str) and len(state) == 2
     
 
 
@@ -345,13 +351,10 @@ class DataManager:
             
             state = self._clean_loc_str(row['state'])
             
-            if len(state) != 2:
+            if self._is_valid_state(state):
                 state = self.try_get_state_abbr(state)
         
-        if self._is_valid_state(state):
-            row['state'] = state
-        else:
-            row['state'] = None
+        row['state'] = state if self._is_valid_state(state) else None
 
         return row
 

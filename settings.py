@@ -1,6 +1,6 @@
 import os
 
-REPO_PATH = os.path.abspath('./job-estimator')
+REPO_PATH = os.path.abspath('')
 
 BLS_JOBS = REPO_PATH +'/assets/bls_gov_jobs.json' #From https://www.bls.gov/ooh/a-z-index.htm
 STATE_ABBR = REPO_PATH + '/assets/state_abbr.json' #This file was modified from this github gist https://gist.github.com/JeffPaine/3083347

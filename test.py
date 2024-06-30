@@ -52,7 +52,7 @@ for test in tests:
                         })
 
         result = DataManager()._clean_state(test_input)['state']
-        print(result)
         assert result == test.get('expected')
-    except (AssertionError) as error:
-        print(test, result, str(error))
+    except Exception as e:
+        print(test, result)
+        print(e)
