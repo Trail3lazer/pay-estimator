@@ -89,6 +89,35 @@ class DataManager:
         return df
     
     
+
+    def load_data_files():
+        postings = pd.read_csv(settings.POSTINGS, index_col='job_id')
+        companies = pd.read_csv(settings.COMPANIES, index_col='company_id')
+        company_industries = pd.read_csv(settings.COMPANY_INDUSTRIES, index_col='company_id')
+        company_specialties = pd.read_csv(settings.COMPANY_SPECIALTIES, index_col='company_id')
+        benefits = pd.read_csv(settings.BENEFITS, index_col='job_id')
+        job_skills = pd.read_csv(settings.JOB_SKILLS, index_col='job_id')
+        job_industries = pd.read_csv(settings.JOB_INDUSTRIES, index_col='job_id')
+        salaries = pd.read_csv(settings.SALARIES, index_col='job_id')
+        industries = pd.read_csv(settings.INDUSTRIES, index_col='industry_id')
+        skills = pd.read_csv(settings.SKILLS, index_col='skill_abr')
+        
+        job_industries = job_industries.join(industries, on='industry_id')
+        job_skills = job_skills.join(skills, on='skill_abr')
+        
+        cdf = companies.join(company_industries, on='company_id')
+        cdf = cdf.join(company_specialties, on='company_id')
+        
+        df = postings.join(benefits, on='job_id')
+        df = df.join(job_skills, on='job_id')
+        df = df.join(job_industries, on='job_id')
+        df = df.join(salaries, on='job_id')
+        
+        df = df.join(cdf, on='company_id')
+        df.pi
+        
+    
+    
     
     def _create_postings(self, overwrite=False) -> pd.DataFrame:
         if(os.path.isfile(settings.CLEANED_JOBS) and not overwrite):
@@ -97,13 +126,13 @@ class DataManager:
             return df
         
         print("Reading CSV")
-        df = pd.read_csv(settings.ORIGINAL_CSV)
+        df = pd.read_csv(settings.POSTINGS)
         
         columns_to_drop = [
-            'job_id','company_id','formatted_work_type','currency','views','applies',
-            'original_listed_time','remote_allowed','job_posting_url','application_url',
-            'application_type','expiry','closed_time','listed_time','posting_domain',
-            'sponsored','compensation_type','sponsored',
+            'job_id','company_id','currency','views','applies','original_listed_time',
+            'remote_allowed','job_posting_url','application_url','application_type',
+            'expiry','closed_time','listed_time','posting_domain','sponsored',
+            'compensation_type','sponsored',
             ]
         
         print("Dropping unhelpful columns: "+str(columns_to_drop))
@@ -129,6 +158,11 @@ class DataManager:
         print('Saving cleaned the posting table so we do not need to process it each time.')
         df.to_pickle(settings.CLEANED_JOBS)
         return df
+    
+    
+    
+    
+    
     
     
 
