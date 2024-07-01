@@ -13,8 +13,7 @@ class DataManager:
         self._postings: pd.DataFrame = None
         self._postings_with_pay: pd.DataFrame = None
         self._state_abbr: dict[str,str] = None
-        self._state_abbr_re: re.Pattern = None
-        self._state_name_re: re.Pattern = None
+        self._state_re: re.Pattern = None
         self._pay_cols = ['max_salary','med_salary','min_salary']
         self._bckt_size = 10000
         
@@ -253,8 +252,7 @@ class DataManager:
         #print("Reading the state abbreviation json map.")
         if(self._state_abbr is None): 
             self._state_abbr = dict(json.load(open(settings.STATE_ABBR)))
-            self._state_abbr_re = re.compile(r'[^\b](' + '|'.join(self._state_abbr.values()) + r')[\b$]', re.IGNORECASE)
-            self._state_name_re = re.compile(r'[^\b](' + '|'.join(self._state_abbr.keys()) + r')[\b$]', re.IGNORECASE)
+            self._state_re = self._build_state_match_re()
         return self._state_abbr
     
     
@@ -300,15 +298,16 @@ class DataManager:
     def try_get_state_abbr(self, location):
         self._get_state_abbr_file()
         location = self._clean_loc_str(location)
-        name_match = self._state_name_re.match(location)
-        if name_match is not None:
-            return self._state_abbr.get(name_match.string)  
         
-        abbr_match = self._state_abbr_re.match(location)
-        if abbr_match is not None:
-            return abbr_match.string
+        name_match = self._state_re.search(location)
+        if name_match is None:
+            return location  
         
-        return location     
+        name_match = name_match.group()
+        if len(name_match) == 2:
+            return name_match
+    
+        return self._state_abbr.get(name_match)
 
 
     
@@ -345,13 +344,11 @@ class DataManager:
             if len(state) != 2:
                 state = self.try_get_state_abbr(row['location'])
         
-        state_valid = self._is_valid_state(state)
-        
-        if not state_valid and isinstance(row['state'], str):
+        if not self._is_valid_state(state) and isinstance(row['state'], str):
             
             state = self._clean_loc_str(row['state'])
             
-            if self._is_valid_state(state):
+            if not self._is_valid_state(state):
                 state = self.try_get_state_abbr(state)
         
         row['state'] = state if self._is_valid_state(state) else None
@@ -395,4 +392,6 @@ class DataManager:
         return avg
     
     
- 
+    def _build_state_match_re(self):
+        # https://sigpwned.com/2023/06/29/regex-for-50-us-states/
+        return re.compile(r'\b(?:Alabama|AL|Alaska|AK|Arizona|AZ|Arkansas|AR|California|CA|Colorado|CO|Connecticut|CT|Delaware|DE|Florida|FL|Georgia|GA|Hawaii|HI|Idaho|ID|Illinois|IL|Indiana|IN|Iowa|IA|Kansas|KS|Kentucky|KY|Louisiana|LA|Maine|ME|Maryland|MD|Massachusetts|MA|Michigan|MI|Minnesota|MN|Mississippi|MS|Missouri|MO|Montana|MT|Nevada|NV|New\s+Hampshire|NH|New\s+Jersey|NJ|New\s+Mexico|NM|New\s+York|NY|North\s+Carolina|NC|North\s+Dakota|ND|Ohio|OH|Oklahoma|OK|Oregon|OR|Pennsylvania|PA|Rhode\s+Island|RI|South\s+Carolina|SC|South\s+Dakota|SD|Tennessee|TN|Texas|TX|Utah|UT|Vermont|VT|Virginia|VA|Washington\s+DC|DC|Washington|WA|West\s+Virginia|WV|Wisconsin|WI|Wyoming|WY|Nebraska|NE)\b', re.IGNORECASE)

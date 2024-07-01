@@ -46,13 +46,10 @@ tests = [
 
 for test in tests:
     try:
-        test_input = pd.Series({
-                        'location': 'Fort Collins',
-                        'state': 'Fort Collins, wA'
-                        })
+        test_input = pd.Series(test)
 
         result = DataManager()._clean_state(test_input)['state']
         assert result == test.get('expected')
     except Exception as e:
-        print(test, result)
+        print(test, result or 'No match')
         print(e)
