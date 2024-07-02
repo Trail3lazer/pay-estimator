@@ -1,10 +1,24 @@
-import os, json, settings
+import os, json, settings, pickle
 import pandas as pd
 import numpy as np
-import dask.dataframe as dd
+from gensim.models.callbacks import CallbackAny2Vec
 from gensim.models import Word2Vec
 from gensim.utils import simple_preprocess
 from sklearn.model_selection import train_test_split
+
+class callback(CallbackAny2Vec): # https://stackoverflow.com/questions/54888490/gensim-word2vec-print-log-loss
+    def __init__(self):
+        self.epoch = 0
+        self.last_total = 0
+        self.last_loss = 0
+
+    def on_epoch_end(self, model):
+        total = model.get_latest_training_loss()
+        loss = total-self.last_total
+        print(f'epoch: {self.epoch}, loss: {loss}, diff: {loss-self.last_loss}')
+        self.epoch += 1
+        self.last_total = total
+        self.last_loss = loss
 
 class Job2Vec:
     def __init__(self):
@@ -14,27 +28,29 @@ class Job2Vec:
         self._default_vec: list[float] = None
     
     
-    
-    def preprocess_data(self, df: pd.DataFrame = None, bls_jobs: pd.Series = None) -> pd.Series:
-
-        if(os.path.isfile(settings.TOKENIZED_JOBS)):
+    def try_load_dataset(self):
+        if os.path.isfile(settings.TOKENIZED_JOBS):
             print("Retrieving an existing dataset at "+settings.TOKENIZED_JOBS)
-            return dd.read_parquet(settings.TOKENIZED_JOBS)
-                
-        print("Combining the the bls.gov job list, LinkedIn job title, description and skills, columns to create a single array. Word2Vec does not need them separated.")
-        data = [bls_jobs, df['job_title'].unique(), df['job_desc'].unique(), df['skills_desc'].unique(), df['company_desc'].unique(), df['company_industry'].unique()]
-        ser = pd.concat(data, ignore_index=True)
+            with open(settings.TOKENIZED_JOBS, 'rb') as f:
+                dataset = pickle.load(f)
+            return list(dataset)
+        return None
+    
+    
+    def preprocess_data(self, sentences: list[str]) -> np.ndarray:
         
         print("Cleaning and tokenizing each row with a helper method from Gensim. This usually takes less than 2 minutes.")
-        ser: pd.Series = ser.apply(self.tokenize)
-        
-        print("Dropping empty rows.")
-        ser.dropna(inplace=True)
+        tokens = []
+        for x in sentences:
+            tkns = self.tokenize(x)
+            if len(tkns): 
+                tokens.append(tkns)
         
         print("Saving the cleaned data set.")
-        ser.to_parquet(settings.TOKENIZED_JOBS)
-
-        return ser
+        with open(settings.TOKENIZED_JOBS, 'wb') as f:
+            pickle.dump(tokens, f)
+        
+        return tokens
     
     
     
@@ -46,12 +62,6 @@ class Job2Vec:
             else:
                 self._model = self.train(dataset)
         return self._model
-    
-    
-    
-    def retrain(self) -> None:
-        self._dataset = self.prepare_training_data(overwrite=True)
-        self._model = self.train(overwrite=True)
     
     
     
@@ -84,22 +94,11 @@ class Job2Vec:
 
 
     def train(self, dataset) -> Word2Vec:
-        print("Splitting the tokenized data into training and test sets.")
-        training_set, testing_set = train_test_split(dataset, test_size=0.05)
+        #print("Splitting the tokenized data into training and test sets.")
         print("Training...")
-        m = Word2Vec(training_set, vector_size=100, window=5, min_count=3, workers=os.cpu_count()-1)
+        m = Word2Vec(dataset, epochs=100, vector_size=100, window=5, min_count=3, workers=os.cpu_count()-1, compute_loss=True, callbacks=[callback()])
         print("Saving the model.")
-        m.save(self.model_path)
-        
-        self.test_model(m, training_set, testing_set)
+        m.save(settings.W2V_MODEL)
         
         return m
     
-    
-    
-    def test_model(self, model, x_train, x_test):
-        words = set(model.wv.index_to_key)
-        X_train_vect = np.array([np.array([model.wv[i] for i in ls if i in words]) for ls in x_train])
-        X_test_vect = np.array([np.array([model.wv[i] for i in ls if i in words]) for ls in x_test])
-        print(X_train_vect)
-        print(X_test_vect)

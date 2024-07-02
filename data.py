@@ -115,13 +115,13 @@ class DataManager:
     
     
     def load_additional_tables(self):
-        industries = self.get(settings.INDUSTRIES, index_col='industry_id')
-        skills = self.get(settings.SKILLS, index_col='skill_abr')
-        benefits = self.get(settings.BENEFITS, index_col='job_id')
-        company_industries = self.get(settings.COMPANY_INDUSTRIES, index_col='company_id')
-        company_specialities = self.get(settings.COMPANY_SPECIALITIES, index_col='company_id')
+        industries = self.get(settings.INDUSTRIES, index_col='industry_id')['industry_name'].to_numpy()
+        skills = self.get(settings.SKILLS, index_col='skill_abr')['skill_name'].to_numpy()
+        benefits = self.get(settings.BENEFITS, index_col='job_id')['type'].unique()
+        company_industries = self.get(settings.COMPANY_INDUSTRIES, index_col='company_id')['industry'].unique()
+        company_specialities = self.get(settings.COMPANY_SPECIALITIES, index_col='company_id')['speciality'].unique()
         
-        return benefits,skills,industries,company_industries,company_specialities
+        return [benefits,skills,industries,company_industries,company_specialities]
 
 
 

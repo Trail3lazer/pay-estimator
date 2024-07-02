@@ -23,7 +23,7 @@ COMBINED_DATA = REPO_PATH + '/archive/app/data.lz4'
 
 CLEANED_JOBS = REPO_PATH + '/archive/app/clean_postings.pqt'
 
-TOKENIZED_JOBS = REPO_PATH +'/archive/app/tokenized_jobs.pqt'
+TOKENIZED_JOBS = REPO_PATH +'/archive/app/tokenized_jobs.pickle'
 W2V_MODEL = REPO_PATH +'/assets/w2v/w2v.model'
 
 CATEGORY_VECS = REPO_PATH + '/assets/w2v/vectorized_categories.bin'
