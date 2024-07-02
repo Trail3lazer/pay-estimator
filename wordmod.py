@@ -15,29 +15,36 @@ class Job2Vec:
     
     
     
-    def get_dataset(self, jobs_df: pd.DataFrame = None, bls_jobs: pd.Series = None) -> pd.Series:
-        if self._dataset is None:
-            if(os.path.isfile(settings.TOKENIZED_JOBS)):
-                print("Retrieving an existing dataset at "+settings.TOKENIZED_JOBS)
-                self._dataset = dd.read_parquet(settings.TOKENIZED_JOBS)
-            elif isinstance(jobs_df, pd.DataFrame): 
-                self._jobs_df = jobs_df
+    def preprocess_data(self, df: pd.DataFrame = None, bls_jobs: pd.Series = None) -> pd.Series:
+
+        if(os.path.isfile(settings.TOKENIZED_JOBS)):
+            print("Retrieving an existing dataset at "+settings.TOKENIZED_JOBS)
+            return dd.read_parquet(settings.TOKENIZED_JOBS)
                 
-            if self._jobs_df is None: 
-                raise ValueError("Job data must be passed in before the data can be prepared for training.")
-            
-            self._dataset = self.prepare_training_data(bls_jobs)
-        return self._dataset
+        print("Combining the the bls.gov job list, LinkedIn job title, description and skills, columns to create a single array. Word2Vec does not need them separated.")
+        data = [bls_jobs, df['job_title'].unique(), df['job_desc'].unique(), df['skills_desc'].unique(), df['company_desc'].unique(), df['company_industry'].unique()]
+        ser = pd.concat(data, ignore_index=True)
+        
+        print("Cleaning and tokenizing each row with a helper method from Gensim. This usually takes less than 2 minutes.")
+        ser: pd.Series = ser.apply(self.tokenize)
+        
+        print("Dropping empty rows.")
+        ser.dropna(inplace=True)
+        
+        print("Saving the cleaned data set.")
+        ser.to_parquet(settings.TOKENIZED_JOBS)
+
+        return ser
     
     
     
-    def get_model(self) -> Word2Vec:
+    def get_model(self, dataset = None) -> Word2Vec:
         if self._model is None:       
             if(os.path.isfile(settings.W2V_MODEL)):
                 print("Retrieving an existing model from "+settings.W2V_MODEL)
                 self._model = Word2Vec.load(settings.W2V_MODEL)
             else:
-                self._model = self.train()
+                self._model = self.train(dataset)
         return self._model
     
     
@@ -74,35 +81,13 @@ class Job2Vec:
     def get_vector_length(self):
         return self.get_model().wv.vector_size
         
-        
-        
-    def prepare_training_data(self, overwrite=False) -> pd.Series:
-        df = self._jobs_df.copy()
-        
-        bls_jobs = self._get_bls_jobs()
-        
-        print("Combining the the bls.gov job list, LinkedIn job title, description and skills, columns to create a single array. Word2Vec does not need them separated.")
-        data = [bls_jobs, df['job_title'], df['job_desc'], df['skills_desc'], df['company_desc'], df['company_industry'].unique()]
-        ser = pd.concat(data, ignore_index=True)
-        
-        print("Cleaning and tokenizing each row with a helper method from Gensim. This usually takes less than 2 minutes.")
-        ser = ser.apply(self.tokenize)
-        
-        print("Dropping empty rows.")
-        ser.dropna(inplace=True)
-        
-        print("Saving the cleaned data set.")
-        ser.to_pickle(settings.TOKENIZED_JOBS)
-
-        return ser
 
 
-
-    def train(self, overwrite=False) -> Word2Vec:
+    def train(self, dataset) -> Word2Vec:
         print("Splitting the tokenized data into training and test sets.")
-        training_set, testing_set = train_test_split(self.get_dataset(), test_size=0.05)
+        training_set, testing_set = train_test_split(dataset, test_size=0.05)
         print("Training...")
-        m = Word2Vec(training_set, vector_size=300, window=5, min_count=3, workers=os.cpu_count()-1)
+        m = Word2Vec(training_set, vector_size=100, window=5, min_count=3, workers=os.cpu_count()-1)
         print("Saving the model.")
         m.save(self.model_path)
         

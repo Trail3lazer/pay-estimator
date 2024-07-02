@@ -1,7 +1,7 @@
 import os, json, re, settings
+from numbers import Number
 import pandas as pd 
-import numpy as np 
-import dask.dataframe as dd
+import numpy as np
 from scipy import stats 
 from typing import Callable
 from csv import QUOTE_NONE
@@ -12,8 +12,8 @@ class DataManager:
         self._backup_postings: pd.DataFrame = None
         self._postings: pd.DataFrame = None
         self._postings_with_pay: pd.DataFrame = None
-        self._state_abbr: dict[str,str] = None
-        self._state_re: re.Pattern = None
+        self._state_abbr: dict[str,str] = dict(json.load(open(settings.STATE_ABBR)))
+        self._state_re: re.Pattern = self._build_state_match_re()
         self._pay_cols = ['max_salary','med_salary','min_salary']
         self._bckt_size = 10000
         
@@ -22,7 +22,7 @@ class DataManager:
         self._parttime = self._calculate_work_week_hours(5.54, 0.573, 5.48, 0.319)
 
         # https://www.bls.gov/ebs/factsheets/paid-vacations.htm#:~:text=The%20number%20of%20vacation%20days,19%20days%20of%20paid%20vacation.
-        vacation_day_pcts = np.matrix([  
+        vacation_day_pcts = np.array([  
         #<5, <10, <15, <20, <25, >24
         [8,	31,	34,	18,	7,	2],
         [3,	12,	30,	32,	16,	7],
@@ -98,7 +98,7 @@ class DataManager:
         fpath = path.replace('.csv','.pqt')
         df: pd.DataFrame = None
         if os.path.isfile(fpath):
-            df = dd.read_parquet(fpath)
+            df = pd.read_parquet(fpath)
         elif os.path.isfile(path):
             try:
                 df = pd.read_csv(path,
@@ -203,8 +203,17 @@ class DataManager:
         #     group_keys=False
         # ).aggregate(agg_groups)
         
-        return df.compute() # Yes this gets rid of the benefits of Dask lazy loading data but I don't have time to refactor all the code to make it work with lazy loading.
+        return df # Yes this gets rid of the benefits of Dask lazy loading data but I don't have time to refactor all the code to make it work with lazy loading.
         
+    
+    
+    def get_bls_jobs(self) -> pd.Series:
+        bls_jobs = json.load(open(settings.BLS_JOBS))
+        for i,x in enumerate(bls_jobs):
+            joined = ' '.join(x)
+            bls_jobs[i] = pd.NA if len(joined) < 4 else joined
+        return pd.Series(bls_jobs).dropna()
+    
     
     
     def get_bls_jobs(self) -> pd.Series:
@@ -219,13 +228,10 @@ class DataManager:
     def _create_postings(self, overwrite=False) -> pd.DataFrame:
         if(os.path.isfile(settings.CLEANED_JOBS) and not overwrite):
             print("Retrieving an existing dataset at "+settings.CLEANED_JOBS)
-            df = dd.read_parquet(settings.CLEANED_JOBS) 
+            df = pd.read_parquet(settings.CLEANED_JOBS) 
             return df
         
         df: pd.DataFrame = self.load_data_files()
-        
-        unique_states = [st for st in df['state'].unique() if isinstance(st, str) and len(st) > 2]
-        print(list(unique_states))
         
         print("Creating a state abbreviation column from the location column and normalizing the pay columns.")
         df = df.apply(self._normalize_row, axis=1)
@@ -248,32 +254,24 @@ class DataManager:
     
     
     
-    def _get_state_abbr_file(self):
-        #print("Reading the state abbreviation json map.")
-        if(self._state_abbr is None): 
-            self._state_abbr = dict(json.load(open(settings.STATE_ABBR)))
-            self._state_re = self._build_state_match_re()
-        return self._state_abbr
-    
-    
-    
-    def _update_pay(self, row, mult):
+    def update_pay(self, row, mult):
         for c in self._pay_cols:
-            if isinstance(row[c], float):
-                row[c] = (row[c] * mult)
-            elif isinstance(row[c+'0'], str):
-                row[c] = (row[c+'0'] * mult)
+            if isinstance(row[c], Number) and row[c] > 0:
+                row[c] = row[c] * mult
+            elif isinstance(row[c+'0'], Number):
+                row[c] = row[c+'0'] * mult
+        return row
 
 
 
-    def _clean_pay(self, row):
+    def clean_pay(self, row):
         pay_period:str = row['pay_period']
         if(not isinstance(pay_period, str)):
             return row
         if pay_period == 'MONTHLY': 
-            self._update_pay(row, self._months)
+            row = self.update_pay(row, self._months)
         elif pay_period == 'WEEKLY': 
-            self._update_pay(row, self._weeks)
+            row = self.update_pay(row, self._weeks)
         elif pay_period == 'HOURLY':
             work_type = row['work_type']
             if isinstance(work_type, str) and work_type == 'PART_TIME':
@@ -296,7 +294,6 @@ class DataManager:
 
 
     def try_get_state_abbr(self, location):
-        self._get_state_abbr_file()
         location = self._clean_loc_str(location)
         
         name_match = self._state_re.search(location)
@@ -321,7 +318,7 @@ class DataManager:
     
     
     def _is_valid_state(self, state):
-        return isinstance(state, str) and len(state) == 2
+        return isinstance(state, str) and len(state) == 2 and state in self._state_abbr.values()
     
 
 
@@ -359,7 +356,7 @@ class DataManager:
 
     def _normalize_row(self, row):
         row = self._clean_state(row)
-        row = self._clean_pay(row)
+        row = self.clean_pay(row)
         return row
 
 
@@ -393,5 +390,4 @@ class DataManager:
     
     
     def _build_state_match_re(self):
-        # https://sigpwned.com/2023/06/29/regex-for-50-us-states/
         return re.compile(r'\b(?:Alabama|AL|Alaska|AK|Arizona|AZ|Arkansas|AR|California|CA|Colorado|CO|Connecticut|CT|Delaware|DE|Florida|FL|Georgia|GA|Hawaii|HI|Idaho|ID|Illinois|IL|Indiana|IN|Iowa|IA|Kansas|KS|Kentucky|KY|Louisiana|LA|Maine|ME|Maryland|MD|Massachusetts|MA|Michigan|MI|Minnesota|MN|Mississippi|MS|Missouri|MO|Montana|MT|Nevada|NV|New\s+Hampshire|NH|New\s+Jersey|NJ|New\s+Mexico|NM|New\s+York|NY|North\s+Carolina|NC|North\s+Dakota|ND|Ohio|OH|Oklahoma|OK|Oregon|OR|Pennsylvania|PA|Rhode\s+Island|RI|South\s+Carolina|SC|South\s+Dakota|SD|Tennessee|TN|Texas|TX|Utah|UT|Vermont|VT|Virginia|VA|Washington\s+DC|DC|Washington|WA|West\s+Virginia|WV|Wisconsin|WI|Wyoming|WY|Nebraska|NE)\b', re.IGNORECASE)
