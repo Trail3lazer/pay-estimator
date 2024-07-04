@@ -293,6 +293,24 @@ class DataManager:
 
 
 
+    def salary_to_hourly(self, salary: float, pay_period: str, work_type='FULL_TIME'):
+        if(not isinstance(pay_period, str)):
+            return salary
+        if pay_period == 'MONTHLY': 
+            return salary / self._months
+        elif pay_period == 'WEEKLY': 
+            return salary / self._weeks
+        elif pay_period == 'HOURLY':
+            if isinstance(work_type, str) and work_type == 'PART_TIME':
+                hours = self._parttime * self._work_weeks
+            else: 
+                hours = self._fulltime * self._work_weeks
+            return salary/hours
+        elif pay_period == 'BIWEEKLY':
+            return salary / self._weeks * 2
+        return salary
+
+
     def try_get_state_abbr(self, location):
         location = self._clean_loc_str(location)
         
