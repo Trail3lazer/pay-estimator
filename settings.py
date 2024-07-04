@@ -30,4 +30,4 @@ CATEGORY_VECS = REPO_PATH + '/assets/w2v/vectorized_categories.bin'
 
 CATEGORIZED_JOBS = REPO_PATH + '/archive/app/categorized_job_titles.pqt' 
 
-ENTEMB_MODEL = REPO_PATH + 'assets/entemb/entemb.model'
+XGB_MODEL = REPO_PATH + '/assets/XGBReggressor.ubj'
