@@ -12,24 +12,26 @@ class Categorizer:
         self.default_category:str = None
         self.verbosity=verbosity
         self.category_vectors: pd.Series[list[float]] = None
-        self.category_labels: pd.Series[str] = None
+        self.category_labels: list[str] = None
         self.categories_created = False
         
         
         
-    def add_categories(self, categories: list[list[str]]):
+    def add_categories(self, categories: list[str]):
         keys = []
         vectors = []
         for category in categories:
-            if not isinstance(category, list) or len(category) == 0:
+            if not isinstance(category, str) or len(category) == 0:
                 continue
-            tkns = self.tokenize(' '.join(category))
+            tkns = self.tokenize(category)
             if not isinstance(tkns, list) or len(tkns) == 0:
                 if self.verbosity: logging.warning(f'Category is empty after tokenization so it will not be included. "{category}"')
                 continue
             vec = self.wv.get_mean_vector(tkns)
             vectors.append(vec)
-            keys.append(' '.join(self.tokenize(category[0])))
+            keys.append(category)
+        if len(keys) == 0:
+            raise ValueError('Could not create vectors for any input categories.')
         self.kv.add_vectors(keys, vectors)
         self._category_vectors = pd.Series(vectors, index=keys)
         
@@ -64,11 +66,13 @@ class Categorizer:
     
     
     def categorize_to_vec(self, sentence: str) -> tuple:
-        similar = self.get_similar_categories(sentence, topn=1)
-        if len(similar) == 0:
-            print('This did not match: ' + sentence)
+        try:
+            similar = self.get_similar_categories(sentence, topn=1)
+            if len(similar) == 0:
+                raise Exception('No match')
+        except Exception as e:
             return (self.default_category, np.nan)
-        return self.kv.get_index(similar[0][0])
+        return self.kv.get_vector(similar[0][0])
     
     
     
@@ -103,7 +107,8 @@ class Categorizer:
         if os.path.isfile(settings.CATEGORY_VECS):
             print("Retrieving category vectors from "+settings.CATEGORY_VECS)
             self.replace_vectors(KeyedVectors.load(settings.CATEGORY_VECS))
-            return
+            if len(self.kv.index_to_key) > 0:
+                return
         
         print('Creating categories.')
         categories = self.get_category_labels()
@@ -125,7 +130,7 @@ class Categorizer:
         
         if os.path.isfile(settings.JOB_CATEGORIES):
             print("Retrieving category labels from "+settings.JOB_CATEGORIES)
-            self.category_labels = pd.read_json(settings.JOB_CATEGORIES, typ='series', orient='values')
+            self.category_labels = json.load(open(settings.JOB_CATEGORIES))
             return self.category_labels
         
         print('Creating categories.')
@@ -143,11 +148,12 @@ class Categorizer:
             if title:
                 groups[category].append(title)
 
-        self.category_labels = pd.Series(groups.keys())
+        self.category_labels = groups.keys()
         
-        self.category_labels.to_json(settings.JOB_CATEGORIES, indent=2)
+        with open(settings.JOB_CATEGORIES, 'w') as f:
+            json.dump(self.category_labels, f, indent=2)
         
-        return self.category_labels
+        return self.category_labels.to_list()
         
     
     

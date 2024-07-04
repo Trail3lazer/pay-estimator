@@ -15,7 +15,7 @@ class DataManager:
         self._state_abbr: dict[str,str] = dict(json.load(open(settings.STATE_ABBR)))
         self._state_re: re.Pattern = self._build_state_match_re()
         self._pay_cols = ['max_salary','med_salary','min_salary']
-        self._bckt_size = 10000
+        self._bckt_size = 1
         
         # https://www.bls.gov/charts/american-time-use/emp-by-ftpt-job-edu-h.htm
         self._fulltime = self._calculate_work_week_hours(8.42, 0.874, 5.57, 0.287)
