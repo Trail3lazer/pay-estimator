@@ -246,7 +246,7 @@ class DataManager:
         mean = df[self._pay_cols].mean(axis=1).to_numpy()
         quotient = mean / self._bckt_size
         rounded = np.ceil(quotient) 
-        df['pay_bucket'] = rounded * self._bckt_size
+        df['pay'] = rounded * self._bckt_size
         
         print('Saving cleaned the posting table so we do not need to process it each time.')
         df.to_parquet(settings.CLEANED_JOBS)
