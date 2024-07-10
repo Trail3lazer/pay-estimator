@@ -1,10 +1,9 @@
-import os, json, settings, pickle
+import os, settings, pickle
 import pandas as pd
 import numpy as np
 from gensim.models.callbacks import CallbackAny2Vec
 from gensim.models import Word2Vec
 from gensim.utils import simple_preprocess
-from sklearn.model_selection import train_test_split
 
 class callback(CallbackAny2Vec): # https://stackoverflow.com/questions/54888490/gensim-word2vec-print-log-loss
     def __init__(self):
@@ -54,12 +53,12 @@ class Job2Vec:
     
     
     
-    def get_model(self, dataset = None) -> Word2Vec:
+    def try_get_model(self, dataset = None) -> Word2Vec:
         if self._model is None:       
             if(os.path.isfile(settings.W2V_MODEL)):
                 print("Retrieving an existing model from "+settings.W2V_MODEL)
                 self._model = Word2Vec.load(settings.W2V_MODEL)
-            else:
+            elif dataset is not None:
                 self._model = self.train(dataset)
         return self._model
     
@@ -77,19 +76,14 @@ class Job2Vec:
     
     def vectorize(self, sentence: str) -> list[float] | None:
         if not self._default_vec:
-            self._default_vec = [0] * self.get_vector_length()
+            self._default_vec = [0] * self.try_get_model().wv.vector_size
         
         if isinstance(sentence, str):
             tkns = self.tokenize(sentence)
             if len(tkns) > 0:
-                return self.get_model().wv.get_mean_vector(tkns)
+                return self.try_get_model().wv.get_mean_vector(tkns)
             
         return self._default_vec
-    
-    
-        
-    def get_vector_length(self):
-        return self.get_model().wv.vector_size
         
 
 

@@ -46,13 +46,6 @@ class DataManager:
             self._postings = self._backup_postings.copy()
         return self._postings
 
-    
-    
-    def get_postings_with_pay(self):
-        if self._postings_with_pay is None:
-            self._postings_with_pay = self._drop_jobs_missing_pay()
-        return self._postings_with_pay
-
 
 
     def reset_postings(self):
@@ -122,88 +115,6 @@ class DataManager:
         company_specialities = self.get(settings.COMPANY_SPECIALITIES, index_col='company_id')['speciality'].unique()
         
         return [benefits,skills,industries,company_industries,company_specialities]
-
-
-
-    def load_data_files(self) -> pd.DataFrame:
-        print("Reading CSVs")
-        postings = self.get(settings.POSTINGS, index_col='job_id')
-        companies = self.get(settings.COMPANIES, index_col='company_id')
-        company_employees = self.get(settings.EMPLOYEES, index_col='company_id')
-        salaries = self.get(settings.SALARIES, index_col='job_id')
-        
-        print("Joining CSV tables")
-        cdf = companies.join(company_employees)
-        #cdf = cdf.join(company_industries, on='company_id')
-        #cdf = cdf.join(company_specialties, on='company_id')
-        df = postings.join(salaries, on='job_id', rsuffix='0')
-        df = df.join(cdf, on='company_id', rsuffix='_comp')
-        
-        print("Dropping unhelpful columns.")
-        df = df.drop(axis=0, columns=[
-            'company_id',
-            'time_recorded',
-            'original_listed_time',
-            'job_posting_url',
-            'application_url',
-            'application_type',
-            'expiry',
-            'closed_time',
-            'listed_time',
-            'posting_domain',
-            'work_type',
-            'currency',
-            'currency0',
-            'salary_id',
-            #'industry_id',
-            'sponsored',
-            'time_recorded',
-            'remote_allowed',
-            #'skill_abr',
-            'views',
-            'applies',
-            'follower_count',
-            'address',
-            'country',
-            'city',
-            'zip_code',
-            'url'
-        ])
-        
-        print("Renaming confusing columns.")
-        df = df.rename(columns={
-            #'name':                       'company_name',
-            'type':                       'benefit_type',
-            'inferred':                   'benefit_inferred',
-            'formatted_experience_level': 'experience_level',
-            'formatted_work_type':        'work_type',
-            'title':                      'job_title',
-            'description_comp':           'company_desc',
-            'description':                'job_desc',
-            'industry':                   'company_industry',
-            #'industry_name':              'job_industry'
-        })
-                
-        def agg_groups(x):
-            x['benefit_type'] = ','.join(x['benefit_type'].values)
-            x['benefit_type'] = ','.join(x['benefit_type'].values)
-            x['benefit_type'] = ','.join(x['benefit_type'].values)
-            return x
-        
-        
-        #print("Deduping columns.")
-        # joining skill_name, speciality, benefit_type
-        # groups = df.groupby(
-        #     by=['company_name','company_desc','company_industry','company_size',
-        #         'employee_count','job_title','job_desc','job_industry','work_type',
-        #         'skills_desc','experience_level','benefit_inferred','location',
-        #         'state','experience_level','work_type','max_salary','max_salary_0',
-        #         'med_salary','med_salary_0','min_salary','min_salary_0',
-        #         'pay_period','pay_period_0','compensation_type','compensation_type_0'],
-        #     group_keys=False
-        # ).aggregate(agg_groups)
-        
-        return df # Yes this gets rid of the benefits of Dask lazy loading data but I don't have time to refactor all the code to make it work with lazy loading.
         
     
     
@@ -231,7 +142,57 @@ class DataManager:
             df = pd.read_parquet(settings.CLEANED_JOBS) 
             return df
         
-        df: pd.DataFrame = self.load_data_files()
+        print("Reading CSVs")
+        postings = self.get(settings.POSTINGS, index_col='job_id')
+        companies = self.get(settings.COMPANIES, index_col='company_id')
+        company_employees = self.get(settings.EMPLOYEES, index_col='company_id')
+        salaries = self.get(settings.SALARIES, index_col='job_id')
+        
+        print("Joining CSV tables")
+        cdf = companies.join(company_employees)
+        df = postings.join(salaries, on='job_id', rsuffix='0')
+        df = df.join(cdf, on='company_id', rsuffix='_comp')
+        
+        print("Dropping unhelpful columns.")
+        df = df.drop(axis=0, columns=[
+            'company_id',
+            'time_recorded',
+            'original_listed_time',
+            'job_posting_url',
+            'application_url',
+            'application_type',
+            'expiry',
+            'closed_time',
+            'listed_time',
+            'posting_domain',
+            'work_type',
+            'currency',
+            'currency0',
+            'salary_id',
+            'sponsored',
+            'time_recorded',
+            'remote_allowed',
+            'views',
+            'applies',
+            'follower_count',
+            'address',
+            'country',
+            'city',
+            'zip_code',
+            'url'
+        ])
+        
+        print("Renaming confusing columns.")
+        df = df.rename(columns={
+            'type':                       'benefit_type',
+            'inferred':                   'benefit_inferred',
+            'formatted_experience_level': 'experience_level',
+            'formatted_work_type':        'work_type',
+            'title':                      'job_title',
+            'description_comp':           'company_desc',
+            'description':                'job_desc',
+            'industry':                   'company_industry',       
+        })
         
         print("Creating a state abbreviation column from the location column and normalizing the pay columns.")
         df = df.apply(self._normalize_row, axis=1)
@@ -248,8 +209,36 @@ class DataManager:
         rounded = np.ceil(quotient) 
         df['pay'] = rounded * self._bckt_size
         
+        dup_cols = ['job_title','company_name','job_desc','state','pay']
+        print(f"Dropping duplicate jobs based on these colums: {', '.join(dup_cols)}.")
+        df = df.drop_duplicates(subset=dup_cols, ignore_index=True)
+        
         print('Saving cleaned the posting table so we do not need to process it each time.')
         df.to_parquet(settings.CLEANED_JOBS)
+        return df
+    
+    
+    
+    def get_or_create_categorized_postings(self, categorize_func):
+        if os.path.isfile(settings.CATEGORIZED_JOBS):
+            print(f'Retrieving categorized jobs from file {settings.CATEGORIZED_JOBS}')
+            df = pd.read_parquet(settings.CATEGORIZED_JOBS)
+        else:
+            df = self.get_postings()
+            df = df[['job_title','pay','state']].copy()
+
+            df['category'] = None
+
+            def categorize(row):
+                category = categorize_func(row['job_title'])
+                if isinstance(category, tuple):
+                    row['category'] = category[0]
+                return row
+
+            print('Categorizing jobs.')
+            df: pd.DataFrame = df.apply(categorize, axis=1)
+            
+            df.to_parquet(settings.CATEGORIZED_JOBS)
         return df
     
     
@@ -309,6 +298,7 @@ class DataManager:
         elif pay_period == 'BIWEEKLY':
             return salary / self._weeks * 2
         return salary
+
 
 
     def try_get_state_abbr(self, location):
@@ -376,12 +366,6 @@ class DataManager:
         row = self._clean_state(row)
         row = self.clean_pay(row)
         return row
-
-
-
-    def _drop_jobs_missing_pay(self):
-        print("Dropping rows where every pay column is empty.")
-        return self.get_postings().copy().dropna(thresh=1, subset=self._pay_cols)
         
         
         
