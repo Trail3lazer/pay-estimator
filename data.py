@@ -1,10 +1,10 @@
+print('Importing libraries for the DataManager class.')
 import os, json, re, settings
 from numbers import Number
 import pandas as pd 
 import numpy as np
 from scipy import stats 
 from typing import Callable
-from csv import QUOTE_NONE
 
 class DataManager:
         
@@ -95,9 +95,7 @@ class DataManager:
         elif os.path.isfile(path):
             try:
                 df = pd.read_csv(path,
-                                 #quoting=QUOTE_NONE,
                                  on_bad_lines='warn',
-                                 #sample=2**20
                                  ).set_index(index_col)
             except (Exception) as detail: 
                 print(path, detail)
@@ -137,6 +135,9 @@ class DataManager:
     
     
     def _create_postings(self, overwrite=False) -> pd.DataFrame:
+        if not os.path.exists(settings.APP_ARCHIVE_PATH):
+            os.makedirs(settings.APP_ARCHIVE_PATH)
+        
         if(os.path.isfile(settings.CLEANED_JOBS) and not overwrite):
             print("Retrieving an existing dataset at "+settings.CLEANED_JOBS)
             df = pd.read_parquet(settings.CLEANED_JOBS) 
@@ -389,6 +390,7 @@ class DataManager:
             days.append(np.sum([day*pct/100 for day in range((j*5),(j*5)+5)]))
         avg = np.mean(days)
         return avg
+    
     
     
     def _build_state_match_re(self):
