@@ -16,6 +16,7 @@ class DataManager:
         self._state_re: re.Pattern = self._build_state_match_re()
         self._pay_cols = ['max_salary','med_salary','min_salary']
         self._bckt_size = 1
+        self._pay_table_suffix = '_from_salaries'
         
         # https://www.bls.gov/charts/american-time-use/emp-by-ftpt-job-edu-h.htm
         self._fulltime = self._calculate_work_week_hours(8.42, 0.874, 5.57, 0.287)
@@ -143,15 +144,15 @@ class DataManager:
             df = pd.read_parquet(settings.CLEANED_JOBS) 
             return df
         
-        print("Reading CSVs")
+        print("Reading tables")
         postings = self.get(settings.POSTINGS, index_col='job_id')
         companies = self.get(settings.COMPANIES, index_col='company_id')
         company_employees = self.get(settings.EMPLOYEES, index_col='company_id')
         salaries = self.get(settings.SALARIES, index_col='job_id')
         
-        print("Joining CSV tables")
-        cdf = companies.join(company_employees)
-        df = postings.join(salaries, on='job_id', rsuffix='0')
+        print("Joining tables")
+        df = postings.join(salaries, on='job_id', rsuffix=self._pay_table_suffix)
+        cdf = companies.join(company_employees, on='company_id')
         df = df.join(cdf, on='company_id', rsuffix='_comp')
         
         print("Dropping unhelpful columns.")
@@ -164,11 +165,10 @@ class DataManager:
             'application_type',
             'expiry',
             'closed_time',
-            'listed_time',
             'posting_domain',
             'work_type',
             'currency',
-            'currency0',
+            'currency'+self._pay_table_suffix,
             'salary_id',
             'sponsored',
             'time_recorded',
@@ -210,7 +210,7 @@ class DataManager:
         rounded = np.ceil(quotient) 
         df['pay'] = rounded * self._bckt_size
         
-        dup_cols = ['job_title','company_name','job_desc','state','pay']
+        dup_cols = ['job_title','company_name','job_desc','state','pay','listed_time']
         print(f"Dropping duplicate jobs based on these colums: {', '.join(dup_cols)}.")
         df = df.drop_duplicates(subset=dup_cols, ignore_index=True)
         
@@ -247,15 +247,15 @@ class DataManager:
     def update_pay(self, row, mult):
         for c in self._pay_cols:
             if isinstance(row[c], Number) and row[c] > 0:
-                row[c] = row[c] * mult
-            elif isinstance(row[c+'0'], Number):
-                row[c] = row[c+'0'] * mult
+                row[c] = round(row[c] * mult,2)
+            elif isinstance(row[c+self._pay_table_suffix], Number):
+                row[c] = round(row[c+self._pay_table_suffix] * mult,2)
         return row
 
 
 
     def clean_pay(self, row):
-        pay_period:str = row['pay_period']
+        pay_period:str = row['pay_period'] or row['pay_period'+self._pay_table_suffix]
         if(not isinstance(pay_period, str)):
             return row
         if pay_period == 'MONTHLY': 
@@ -279,6 +279,8 @@ class DataManager:
                     continue
                 if row[c] < 10000:
                     row[c] = row[c] * self._weeks / 2
+        else:
+            row = self.update_pay(row, 1)
         return row
 
 
@@ -316,7 +318,7 @@ class DataManager:
         return self._state_abbr.get(name_match)
 
 
-    
+
     def _clean_loc_str(self, loc: str):
         if not isinstance(loc, str):
             return loc
