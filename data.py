@@ -43,7 +43,12 @@ class DataManager:
     def get_postings(self):
         if self._postings is None:
             if self._backup_postings is None:
-                self._backup_postings = self._create_postings()
+                if(os.path.isfile(settings.CLEANED_JOBS)):
+                    print("Retrieving an existing dataset at "+settings.CLEANED_JOBS)
+                    self._backup_postings = pd.read_parquet(settings.CLEANED_JOBS)
+                else:
+                    raw = self.read_postings()
+                    self._backup_postings = self._create_postings(raw)
             self._postings = self._backup_postings.copy()
         return self._postings
 
@@ -88,7 +93,7 @@ class DataManager:
     
     
     
-    def get(self, path: str, index_col=None):
+    def read(self, path: str, index_col=None):
         fpath = path.replace('.csv','.pqt')
         df: pd.DataFrame = None
         if os.path.isfile(fpath):
@@ -107,11 +112,11 @@ class DataManager:
     
     
     def load_additional_tables(self):
-        industries = self.get(settings.INDUSTRIES, index_col='industry_id')['industry_name'].to_numpy()
-        skills = self.get(settings.SKILLS, index_col='skill_abr')['skill_name'].to_numpy()
-        benefits = self.get(settings.BENEFITS, index_col='job_id')['type'].unique()
-        company_industries = self.get(settings.COMPANY_INDUSTRIES, index_col='company_id')['industry'].unique()
-        company_specialities = self.get(settings.COMPANY_SPECIALITIES, index_col='company_id')['speciality'].unique()
+        industries = self.read(settings.INDUSTRIES, index_col='industry_id')['industry_name'].to_numpy()
+        skills = self.read(settings.SKILLS, index_col='skill_abr')['skill_name'].to_numpy()
+        benefits = self.read(settings.BENEFITS, index_col='job_id')['type'].unique()
+        company_industries = self.read(settings.COMPANY_INDUSTRIES, index_col='company_id')['industry'].unique()
+        company_specialities = self.read(settings.COMPANY_SPECIALITIES, index_col='company_id')['speciality'].unique()
         
         return [benefits,skills,industries,company_industries,company_specialities]
         
@@ -135,25 +140,23 @@ class DataManager:
     
     
     
-    def _create_postings(self, overwrite=False) -> pd.DataFrame:
-        if not os.path.exists(settings.APP_ARCHIVE_PATH):
-            os.makedirs(settings.APP_ARCHIVE_PATH)
-        
-        if(os.path.isfile(settings.CLEANED_JOBS) and not overwrite):
-            print("Retrieving an existing dataset at "+settings.CLEANED_JOBS)
-            df = pd.read_parquet(settings.CLEANED_JOBS) 
-            return df
-        
+    def read_postings(self):        
         print("Reading tables")
-        postings = self.get(settings.POSTINGS, index_col='job_id')
-        companies = self.get(settings.COMPANIES, index_col='company_id')
-        company_employees = self.get(settings.EMPLOYEES, index_col='company_id')
-        salaries = self.get(settings.SALARIES, index_col='job_id')
+        postings = self.read(settings.POSTINGS, index_col='job_id')
+        companies = self.read(settings.COMPANIES, index_col='company_id')
+        company_employees = self.read(settings.EMPLOYEES, index_col='company_id')
+        salaries = self.read(settings.SALARIES, index_col='job_id')
         
         print("Joining tables")
         df = postings.join(salaries, on='job_id', rsuffix=self._pay_table_suffix)
         cdf = companies.join(company_employees, on='company_id')
         df = df.join(cdf, on='company_id', rsuffix='_comp')
+        
+        return df
+    
+    
+    
+    def _create_postings(self, df) -> pd.DataFrame:
         
         print("Dropping unhelpful columns.")
         df = df.drop(axis=0, columns=[
@@ -210,9 +213,9 @@ class DataManager:
         rounded = np.ceil(quotient) 
         df['pay'] = rounded * self._bckt_size
         
-        dup_cols = ['job_title','company_name','job_desc','state','pay','listed_time']
-        print(f"Dropping duplicate jobs based on these colums: {', '.join(dup_cols)}.")
-        df = df.drop_duplicates(subset=dup_cols, ignore_index=True)
+        #dup_cols = ['job_title','company_name','job_desc','state','pay','listed_time']
+        #print(f"Dropping duplicate jobs based on these colums: {', '.join(dup_cols)}.")
+        #df: pd.DataFrame = df.drop_duplicates(subset=dup_cols, ignore_index=True)
         
         print('Saving cleaned the posting table so we do not need to process it each time.')
         df.to_parquet(settings.CLEANED_JOBS)
