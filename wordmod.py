@@ -5,7 +5,9 @@ from gensim.models.callbacks import CallbackAny2Vec
 from gensim.models import Word2Vec
 from gensim.utils import simple_preprocess
 
-class callback(CallbackAny2Vec): # https://stackoverflow.com/questions/54888490/gensim-word2vec-print-log-loss
+
+
+class callback(CallbackAny2Vec): 
     def __init__(self):
         self.epoch = 0
         self.last_total = 0
@@ -19,12 +21,15 @@ class callback(CallbackAny2Vec): # https://stackoverflow.com/questions/54888490/
         self.last_total = total
         self.last_loss = loss
 
+
+
 class Job2Vec:
     def __init__(self):
         self._jobs_df: pd.DataFrame = None
         self._dataset: pd.Series = None
         self._model = None
         self._default_vec: list[float] = None
+    
     
     
     def try_load_dataset(self):
@@ -34,6 +39,7 @@ class Job2Vec:
                 dataset = pickle.load(f)
             return list(dataset)
         return None
+    
     
     
     def preprocess_data(self, sentences: list[str]) -> np.ndarray:

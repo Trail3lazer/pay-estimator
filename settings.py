@@ -36,6 +36,3 @@ TOKENIZED_JOBS = APP_ARCHIVE_PATH + '/tokenized_jobs.bin'
 W2V_MODEL = MODELS_PATH + '/w2v.bin'
 CATEGORY_VECS = MODELS_PATH + '/vectorized_categories.bin'
 XGB_MODEL = MODELS_PATH + '/XGBReggressor.ubj'
-
-def set_archive_path(path: str):
-    APP_ARCHIVE_PATH = path
