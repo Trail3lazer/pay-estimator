@@ -1,4 +1,0 @@
-*.fea filter=lfs diff=lfs merge=lfs
-*.bin filter=lfs diff=lfs merge=lfs
-*.ubj filter=lfs diff=lfs merge=lfs
-*.pqt filter=lfs diff=lfs merge=lfs
