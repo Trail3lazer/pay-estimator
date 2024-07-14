@@ -94,19 +94,13 @@ class DataManager:
     
     
     def read(self, path: str, index_col=None):
-        fpath = path.replace('.csv','.pqt')
-        df: pd.DataFrame = None
-        if os.path.isfile(fpath):
-            df = pd.read_parquet(fpath)
-        elif os.path.isfile(path):
+        if os.path.isfile(path):
             try:
                 df = pd.read_csv(path,
                                  on_bad_lines='warn',
                                  ).set_index(index_col)
             except (Exception) as detail: 
                 print(path, detail)
-            df.to_parquet(fpath)
-            os.remove(path)
         return df
     
     
