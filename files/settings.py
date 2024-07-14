@@ -2,7 +2,7 @@ import os
 
 REPO_PATH = os.path.abspath('.')
 
-ARCHIVE_PATH = REPO_PATH + '/.archive'
+ARCHIVE_PATH = REPO_PATH + '/archive'
 APP_ARCHIVE_PATH = ARCHIVE_PATH + '/app'
 ASSETS_PATH = REPO_PATH + '/assets'
 MODELS_PATH = ASSETS_PATH + '/models'
@@ -32,9 +32,8 @@ CATEGORIZED_JOBS = APP_ARCHIVE_PATH + '/categorized_postings.pqt'
 TOKENIZED_JOBS = APP_ARCHIVE_PATH + '/tokenized_jobs.bin' 
 
 # Models
-W2V_MODEL = MODELS_PATH + '/w2v.model'
+W2V_MODEL = MODELS_PATH + '/w2v.bin'
 CATEGORY_VECS = MODELS_PATH + '/vectorized_categories.bin'
-PREPROCESSOR = MODELS_PATH + '/preprocessor_pipe.xz'
 XGB_MODEL = MODELS_PATH + '/XGBReggressor.ubj'
 
 def set_archive_path(path: str):

@@ -45,10 +45,13 @@ class DataManager:
             if self._backup_postings is None:
                 if(os.path.isfile(settings.CLEANED_JOBS)):
                     print("Retrieving an existing dataset at "+settings.CLEANED_JOBS)
-                    self._backup_postings = pd.read_parquet(settings.CLEANED_JOBS)
+                    self._backup_postings = pd.read_feather(settings.CLEANED_JOBS)
                 else:
                     raw = self.read_postings()
                     self._backup_postings = self._create_postings(raw)
+                    
+                    print('Saving cleaned the posting table so we do not need to process it each time.')
+                    self._backup_postings.to_feather(settings.CLEANED_JOBS)
             self._postings = self._backup_postings.copy()
         return self._postings
 
@@ -94,11 +97,20 @@ class DataManager:
     
     
     def read(self, path: str, index_col=None):
-        try:
-            df = pd.read_csv(path, on_bad_lines='warn')
-            return df.set_index(index_col)
-        except (Exception) as detail: 
-            print(path, detail)
+        fpath = path.replace('.csv','.fea')
+        df: pd.DataFrame = None
+        if os.path.isfile(fpath):
+            df = pd.read_feather(fpath)
+        elif os.path.isfile(path):
+            try:
+                df = pd.read_csv(path,
+                                 on_bad_lines='warn',
+                                 ).set_index(index_col)
+            except (Exception) as detail: 
+                print(path, detail)
+            df.to_feather(fpath)
+            os.remove(path)
+        return df
     
     
     
@@ -208,8 +220,6 @@ class DataManager:
         #print(f"Dropping duplicate jobs based on these colums: {', '.join(dup_cols)}.")
         #df: pd.DataFrame = df.drop_duplicates(subset=dup_cols, ignore_index=True)
         
-        print('Saving cleaned the posting table so we do not need to process it each time.')
-        df.to_parquet(settings.CLEANED_JOBS)
         return df
     
     
@@ -217,7 +227,7 @@ class DataManager:
     def get_or_create_categorized_postings(self, categorize_func):
         if os.path.isfile(settings.CATEGORIZED_JOBS):
             print(f'Retrieving categorized jobs from file {settings.CATEGORIZED_JOBS}')
-            df = pd.read_parquet(settings.CATEGORIZED_JOBS)
+            df = pd.read_feather(settings.CATEGORIZED_JOBS)
         else:
             df = self.get_postings()
             df = df[['job_title','pay','state']].copy()
@@ -233,7 +243,7 @@ class DataManager:
             print('Categorizing jobs.')
             df: pd.DataFrame = df.apply(categorize, axis=1)
             
-            df.to_parquet(settings.CATEGORIZED_JOBS)
+            df.to_feather(settings.CATEGORIZED_JOBS)
         return df
     
     
