@@ -6,19 +6,20 @@ ARCHIVE_PATH = REPO_PATH + '/archive'
 APP_ARCHIVE_PATH = ARCHIVE_PATH + '/app'
 ASSETS_PATH = REPO_PATH + '/assets'
 MODELS_PATH = ASSETS_PATH + '/models'
+ARCHIVE_EXT = '.csv'
 
 # Dataset
-POSTINGS = ARCHIVE_PATH + '/postings.csv'
-COMPANIES = ARCHIVE_PATH + '/companies/companies.csv'
-COMPANY_INDUSTRIES = ARCHIVE_PATH + '/companies/company_industries.csv'
-COMPANY_SPECIALITIES = ARCHIVE_PATH + '/companies/company_specialities.csv'
-EMPLOYEES = ARCHIVE_PATH + '/companies/employee_counts.csv'
-BENEFITS = ARCHIVE_PATH + '/jobs/benefits.csv'
-JOB_SKILLS = ARCHIVE_PATH + '/jobs/job_skills.csv'
-JOB_INDUSTRIES = ARCHIVE_PATH + '/jobs/job_industries.csv'
-SALARIES = ARCHIVE_PATH + '/jobs/salaries.csv'
-SKILLS = ARCHIVE_PATH + '/mappings/skills.csv'
-INDUSTRIES = ARCHIVE_PATH + '/mappings/industries.csv'
+POSTINGS = ARCHIVE_PATH + '/postings' + ARCHIVE_EXT
+COMPANIES = ARCHIVE_PATH + '/companies/companies' + ARCHIVE_EXT
+COMPANY_INDUSTRIES = ARCHIVE_PATH + '/companies/company_industries' + ARCHIVE_EXT
+COMPANY_SPECIALITIES = ARCHIVE_PATH + '/companies/company_specialities' + ARCHIVE_EXT
+EMPLOYEES = ARCHIVE_PATH + '/companies/employee_counts' + ARCHIVE_EXT
+BENEFITS = ARCHIVE_PATH + '/jobs/benefits' + ARCHIVE_EXT
+JOB_SKILLS = ARCHIVE_PATH + '/jobs/job_skills' + ARCHIVE_EXT
+JOB_INDUSTRIES = ARCHIVE_PATH + '/jobs/job_industries' + ARCHIVE_EXT
+SALARIES = ARCHIVE_PATH + '/jobs/salaries' + ARCHIVE_EXT
+SKILLS = ARCHIVE_PATH + '/mappings/skills' + ARCHIVE_EXT
+INDUSTRIES = ARCHIVE_PATH + '/mappings/industries' + ARCHIVE_EXT
 
 # Additional data
 JOB_CATEGORIES = ASSETS_PATH + '/job_categories.json'

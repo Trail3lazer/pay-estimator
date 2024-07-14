@@ -1,8 +1,7 @@
 from gensim.models import KeyedVectors
-import pandas as pd
 import numpy as np
 from typing import Callable
-import logging, os, settings, json
+import logging, settings, json
 
 class Categorizer:
     def __init__(self, model_vectors: KeyedVectors, tokenize: Callable[[str],list[str]], verbosity=0):
